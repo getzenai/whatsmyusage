@@ -25,6 +25,10 @@ Read `README.md` and `docs/` before changing parsers or cookie handling.
   return an empty body and `grpc-status: 13`. Status is in the trailer frame
   (flag `0x80`), never in the HTTP header. Only take the limit when field
   `1.8.1 == 2` (weekly); any other period type is dropped, not remapped.
+- The usage log stores every reading, never a state change it decided at write time,
+  and never `accountLabel` (org name, plan). The series key is `trackingID + limit.id`,
+  which survives a rename. Anything derived — resets, waits, burn rate — is a query in
+  `UsageHistory`, so a wrong rule stays fixable instead of destroying data.
 - Do not hardcode limit names the provider invents. Claude's `limits[]` grows
   new `kind` values; unknown ones pass through.
 

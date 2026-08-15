@@ -8,6 +8,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let client = UsageClient()
     private var refreshTimer: Timer?
     private var inflight: Task<Void, Never>?
+    private let usageLog = UsageLogWriter()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         DefaultsMigration.run()
@@ -86,6 +87,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 KeychainStore.recordClaudeOrgs(result.claudeOrgIDsByAccountID)
             }
             self.lastByProvider = result.byProvider
+            // Log the reading, not the display: `apply` also runs when only a
+            // preference changed, and that is not a new measurement.
+            self.usageLog.record(result.byProvider)
             self.apply(result.byProvider)
         }
     }
