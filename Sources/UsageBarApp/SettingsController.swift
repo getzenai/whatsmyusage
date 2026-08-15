@@ -648,8 +648,8 @@ private struct DetectedCard: View {
 }
 
 /// Sketch of the macOS Keychain sheet — must not look like a live window.
-/// The older “confidential information stored in credentials” prompt is a
-/// different sheet. This is the access-key wording people actually see.
+/// Wording matches the sheet WhatsMyUsage actually raises (generic password,
+/// “confidential information stored in”), not the “access key” variant.
 private struct KeychainPromptPreview: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -667,7 +667,7 @@ private struct KeychainPromptPreview: View {
                 HStack(alignment: .top, spacing: 12) {
                     lockBadge
                     VStack(alignment: .leading, spacing: 5) {
-                        Text("\(AppIdentity.displayName) wants to access key “\(AppIdentity.keychainService)” in your keychain.")
+                        Text("\(AppIdentity.displayName) wants to use your confidential information stored in “\(AppIdentity.keychainService)” in your keychain.")
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(.primary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -705,7 +705,7 @@ private struct KeychainPromptPreview: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
-            "Preview of the Keychain prompt. Not a real window. \(AppIdentity.displayName) will ask to access key \(AppIdentity.keychainService)."
+            "Preview of the Keychain prompt. Not a real window. \(AppIdentity.displayName) will ask to use confidential information stored in \(AppIdentity.keychainService)."
         )
     }
 

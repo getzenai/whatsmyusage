@@ -3,7 +3,7 @@
 enum AppIdentity {
     static let displayName = "WhatsMyUsage"
     static let bundleID = "com.whatsmyusage.app"
-    /// Shown verbatim in the macOS Keychain sheet: 'access key "<this>"'.
+    /// Shown verbatim in the macOS Keychain sheet as the item name.
     /// The product domain, not the bundle id — people read this as the site.
     static let keychainService = "whatsmyusage.com"
     static let websiteHost = "whatsmyusage.com"
