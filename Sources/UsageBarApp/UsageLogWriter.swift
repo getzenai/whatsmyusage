@@ -29,6 +29,26 @@ final class UsageLogWriter {
         }
     }
 
+    /// What the popover shows about the past. Empty when the log is unavailable or
+    /// still empty — a fresh install has no history and must not pretend otherwise.
+    func history() -> PopoverHistory {
+        guard let store else { return .none }
+        do {
+            let series = try store.achievementSeries()
+            guard !series.isEmpty else { return .none }
+            return PopoverHistory(
+                waits: Achievements.currentWaits(series: series),
+                achievements: Achievements.evaluate(
+                    series: series,
+                    observedDays: try store.observedDays()
+                )
+            )
+        } catch {
+            Self.logger.error("cannot read usage log: \(String(describing: error), privacy: .public)")
+            return .none
+        }
+    }
+
     func record(_ byProvider: [Provider: [UsageOutcome]], at date: Date = Date()) {
         // Only real readings. An expired cookie or an HTTP error is not a measurement
         // of zero usage, and writing it as one would bend every later graph.
@@ -43,4 +63,16 @@ final class UsageLogWriter {
             Self.logger.error("cannot write usage log: \(String(describing: error), privacy: .public)")
         }
     }
+}
+
+/// The part of the log the popover shows: what you are waiting on now, and what the
+/// history earned you.
+struct PopoverHistory: Equatable {
+    let waits: [Achievements.CurrentWait]
+    let achievements: [Achievements.Achievement]
+
+    static let none = PopoverHistory(waits: [], achievements: [])
+
+    var isEmpty: Bool { waits.isEmpty && achievements.isEmpty }
+    var earnedCount: Int { achievements.filter(\.isEarned).count }
 }

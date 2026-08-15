@@ -17,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.onRefresh = { [weak self] in self?.refresh() }
         controller.onOpenSettings = { [weak self] in self?.settings.show() }
         controller.onQuit = { NSApp.terminate(nil) }
+        controller.historyProvider = { [weak self] in self?.usageLog.history() ?? .none }
         controller.onRename = { [weak controller] id, name in
             AccountNames.setName(name, for: id)
             controller?.refreshTooltip()

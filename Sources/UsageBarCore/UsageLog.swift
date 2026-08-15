@@ -290,6 +290,71 @@ public final class UsageLog {
         return result
     }
 
+    /// The rows where the reading actually changed, plus the first and the last one.
+    ///
+    /// The state-change log we deliberately did not *store*, computed on read. Runs,
+    /// resets, and waits can only begin or end where something changed, so this is the
+    /// same answer as the full series at a fraction of the rows — and unlike a stored
+    /// change log, a wrong idea of "changed" costs nothing.
+    public func changePoints(trackingID: String, limitID: String) throws -> [UsageMeasurement] {
+        let sql = """
+            SELECT observed_at, provider, tracking_id, limit_id, label,
+                   utilization, resets_at, locked, scope, severity
+            FROM (
+                SELECT *,
+                       LAG(utilization) OVER series AS previous_utilization,
+                       LAG(locked) OVER series AS previous_locked,
+                       LEAD(id) OVER series AS following_id
+                FROM measurements
+                WHERE tracking_id = ? AND limit_id = ?
+                WINDOW series AS (ORDER BY observed_at, id)
+            )
+            WHERE previous_utilization IS NULL
+               OR utilization != previous_utilization
+               OR locked != previous_locked
+               OR following_id IS NULL
+            ORDER BY observed_at ASC;
+            """
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
+            throw UsageLogError.sql(lastMessage())
+        }
+        defer { sqlite3_finalize(statement) }
+        bind(statement, 1, trackingID)
+        bind(statement, 2, limitID)
+        return try rows(from: statement)
+    }
+
+    /// One entry per local calendar day that holds at least one reading. Days nobody
+    /// watched must be tellable from days where nothing happened.
+    public func observedDays(calendar: Calendar = .current) throws -> Set<Date> {
+        let sql = "SELECT DISTINCT date(observed_at, 'unixepoch', 'localtime') FROM measurements;"
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
+            throw UsageLogError.sql(lastMessage())
+        }
+        defer { sqlite3_finalize(statement) }
+
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+
+        var days: Set<Date> = []
+        while sqlite3_step(statement) == SQLITE_ROW {
+            if let day = formatter.date(from: text(statement, 0)) {
+                days.insert(calendar.startOfDay(for: day))
+            }
+        }
+        return days
+    }
+
+    /// Everything the achievement rules need, in one call.
+    public func achievementSeries() throws -> [[UsageMeasurement]] {
+        try knownSeries().map { try changePoints(trackingID: $0.trackingID, limitID: $0.limitID) }
+    }
+
     public func count() throws -> Int {
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(db, "SELECT COUNT(*) FROM measurements;", -1, &statement, nil) == SQLITE_OK else {

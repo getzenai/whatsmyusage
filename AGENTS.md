@@ -27,8 +27,12 @@ Read `README.md` and `docs/` before changing parsers or cookie handling.
   `1.8.1 == 2` (weekly); any other period type is dropped, not remapped.
 - The usage log stores every reading, never a state change it decided at write time,
   and never `accountLabel` (org name, plan). The series key is `trackingID + limit.id`,
-  which survives a rename. Anything derived — resets, waits, burn rate — is a query in
-  `UsageHistory`, so a wrong rule stays fixable instead of destroying data.
+  which survives a rename. Anything derived — resets, waits, burn rate, achievements —
+  is a query in `UsageHistory` / `Achievements`, so a wrong rule stays fixable instead
+  of destroying data. No badge is ever stored.
+- Achievements read the change points, not every row. A rule must therefore measure a
+  full stretch to the reading that saw it *end*, never to the last stored full reading:
+  the identical readings in between are not kept, so that one collapses to zero.
 - Do not hardcode limit names the provider invents. Claude's `limits[]` grows
   new `kind` values; unknown ones pass through.
 
