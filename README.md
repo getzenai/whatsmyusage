@@ -1,39 +1,40 @@
 # WhatsMyUsage
 
-macOS-Menüleisten-App unter [whatsmyusage.com](https://whatsmyusage.com): der **wirklich bindende** Verbrauch aller AI-Abos auf einen Blick — Claude, ChatGPT, Grok.
+macOS menu bar app at [whatsmyusage.com](https://whatsmyusage.com): the usage that
+**actually binds you** across every AI subscription, at a glance — Claude, ChatGPT, Grok.
 
-## Warum
+## Why
 
-Bestehende Leisten zeigen bei Claude nur das 5-Stunden-Fenster. Gemessen am 15.08.2026:
-5h-Fenster **0 %**, Wochenlimit **100 %** — die Leiste hätte „0 %" angezeigt, während das
-Konto gesperrt war. Die App muss über alle Limits gehen und das **schlimmste** anzeigen.
+Existing bars only show Claude's 5-hour window. Measured 2026-08-15:
+5h window **0 %**, weekly limit **100 %** — the bar would have read "0 %" while the
+account was locked out. The app has to look at every limit and show the **worst** one.
 
-## Stand
+## Status
 
-| Anbieter | Endpunkt | Stand |
+| Provider | Endpoint | Status |
 |---|---|---|
-| Claude | `/api/bootstrap`, `/api/organizations/{id}/usage` | live gemessen, siehe [docs/RESEARCH_CLAUDE_ENDPOINT.md](docs/RESEARCH_CLAUDE_ENDPOINT.md) |
-| ChatGPT | `/api/auth/session` → Bearer → `GET /backend-api/wham/usage` | live gemessen, siehe [docs/RESEARCH_CHATGPT_GROK_ENDPOINTS.md](docs/RESEARCH_CHATGPT_GROK_ENDPOINTS.md) |
-| Grok | `POST /rest/rate-limits` (2 h, pro Modell) + `GetGrokCreditsConfig` (Woche, grpc-web) | live gemessen, siehe [docs/RESEARCH_GROK_WEEKLY_LIMIT.md](docs/RESEARCH_GROK_WEEKLY_LIMIT.md) |
+| Claude | `/api/bootstrap`, `/api/organizations/{id}/usage` | measured live, see [docs/RESEARCH_CLAUDE_ENDPOINT.md](docs/RESEARCH_CLAUDE_ENDPOINT.md) |
+| ChatGPT | `/api/auth/session` → Bearer → `GET /backend-api/wham/usage` | measured live, see [docs/RESEARCH_CHATGPT_GROK_ENDPOINTS.md](docs/RESEARCH_CHATGPT_GROK_ENDPOINTS.md) |
+| Grok | `POST /rest/rate-limits` (2 h, per model) + `GetGrokCreditsConfig` (weekly, grpc-web) | measured live, see [docs/RESEARCH_GROK_WEEKLY_LIMIT.md](docs/RESEARCH_GROK_WEEKLY_LIMIT.md) |
 
-## Umgang mit Cookies — verbindlich
+## Handling cookies — binding
 
-Session-Cookies (`sessionKey`, `__Secure-next-auth.session-token.*`, `sso`) sind vollwertige
-Anmeldungen. Sie gehören **niemals** in Chat, Issue, Commit, Log oder Testfixture.
+Session cookies (`sessionKey`, `__Secure-next-auth.session-token.*`, `sso`) are full
+logins. They **never** belong in a chat, issue, commit, log, or test fixture.
 
-- Eingabe passiert lokal in der App, direkt aus dem Browser in die Paste-Eingabe.
-- Ablage in der macOS-Keychain, nie in einer Datei im Repo.
-- Fixtures für Tests: echte Antwortstruktur, Werte durch Platzhalter ersetzt.
+- Entry happens locally in the app, straight from the browser into the paste field.
+- Storage in the macOS Keychain, never in a file in the repo.
+- Test fixtures: real response structure, values replaced by placeholders.
 
-**Dieses Repo soll öffentlich werden.** Deshalb gilt dieselbe Regel für alles Kontobezogene:
-keine Org-UUIDs, E-Mail-Adressen, Org-Namen oder realen Verbrauchszahlen — dokumentiert wird
-die *Form* einer Antwort, nie ein Konto.
+**This repo is meant to become public.** The same rule therefore covers everything
+account-related: no org UUIDs, email addresses, org names, or real usage numbers — what gets
+documented is the *shape* of a response, never an account.
 
-Bei ChatGPT ist das Sitzungstoken auf mehrere nummerierte Cookies aufgeteilt
-(`…session-token.0`, `…session-token.1`) — die Extraktion muss die Teile nach Index sortiert
-wieder zusammensetzen, sonst ist das Token still ungültig.
+On ChatGPT the session token is split across several numbered cookies
+(`…session-token.0`, `…session-token.1`) — extraction has to reassemble the parts sorted by
+index, otherwise the token is silently invalid.
 
-## Bauen
+## Building
 
 ```
 swift test
@@ -60,9 +61,11 @@ shows in the access prompt — is `whatsmyusage.com`. A rebuild after a rename
 asks once more, then copies cookies from the previous names
 (`com.whatsmyusage.app`, `de.getzenai.ai-usage-bar`).
 
+## Using it
+
 The app is a menu bar accessory (no Dock icon). UI is English. First launch is a
 short wizard: welcome (Keychain warning + preview of the macOS prompt) → paste
-cookies (Continue stores them) → here’s what we found → close and use the bar.
+cookies (Continue stores them) → here's what we found → close and use the bar.
 The bundle version is the git short hash, shown in Settings and the popover. Chrome: log in → right-click Inspect / ⌥⌘I → Application
 → Storage → Cookies → the site (claude.ai and a.claude.ai are separate) → ⌘A ⌘C.
 Paste in the window. Only the session keys go into the Keychain; the rest of the
@@ -84,22 +87,22 @@ time until reset, and rename.
 | ⌘, | Settings |
 | ⌘Q | Quit |
 
-Auffrischung zusätzlich alle fünf Minuten.
+It also refreshes every five minutes on its own.
 
-## Kern
+## Core
 
-`UsageBarCore` ist ohne Netz testbar:
+`UsageBarCore` is testable without a network:
 
-- `SessionCookies.extractSessionKey` — Cookie-Text → Claude `sessionKey`, ChatGPT-Teile
-  (nach Index sortiert, als nummerierte Cookies gesendet), Grok `sso`
-- `UsageParser.parseUsage` — HTTP-Status + Body → gemeinsames Modell
-  (Bezeichnung, Auslastung 0…1, optionale Zurücksetzung, gesperrt ja/nein/**unbekannt**)
-- `UsageParser.chatGPTAccessToken` — `/api/auth/session` → Bearer; fehlt
-  `accessToken`, ist die Sitzung abgelaufen
-- `UsageParser.parseGrokWeekly` — grpc-web-Körper → Wochenlimit, nur wenn
-  die Periode `weekly` ist; jeder Fehler ist `nil`, nicht „!"
-- 401 = abgelaufen; 403 auf einer Claude-Org = diese Org ist nicht trackbar;
-  403 auf ChatGPT/Grok ist **kein** Logout (Cloudflare)
+- `SessionCookies.extractSessionKey` — cookie text → Claude `sessionKey`, ChatGPT parts
+  (sorted by index, sent back as numbered cookies), Grok `sso`
+- `UsageParser.parseUsage` — HTTP status + body → common model
+  (label, utilization 0…1, optional reset, locked yes/no/**unknown**)
+- `UsageParser.chatGPTAccessToken` — `/api/auth/session` → Bearer; if `accessToken`
+  is missing, the session has expired
+- `UsageParser.parseGrokWeekly` — grpc-web body → weekly limit, only if the
+  period is `weekly`; every error is `nil`, not "!"
+- 401 = expired; 403 on a Claude org = that org is not trackable;
+  403 on ChatGPT/Grok is **not** a logout (Cloudflare)
 
-Pro Anbieter ein Übersetzer. Claude erfindet keinen Sperrzustand. ChatGPT nimmt `allowed`.
-Grok schließt gesperrt aus `remainingQueries == 0`.
+One translator per provider. Claude never invents a lock state. ChatGPT takes `allowed`.
+Grok infers locked from `remainingQueries == 0`.

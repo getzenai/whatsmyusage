@@ -1,7 +1,7 @@
 // swift-tools-version: 6.0
 import PackageDescription
 
-// ai_usage_bar is a single package:
+// WhatsMyUsage is a single package:
 //
 //   UsageBarCore — models, cookie extraction, per-provider translators (all testable)
 //   UsageBar     — the menu bar app (assembled into WhatsMyUsage.app by
@@ -10,7 +10,7 @@ import PackageDescription
 // Everything that can be tested lives in UsageBarCore. The app stays thin so
 // `swift test` covers the behaviour that decides what the bar shows.
 let package = Package(
-    name: "ai_usage_bar",
+    name: "WhatsMyUsage",
     platforms: [.macOS(.v14)],
     products: [
         .library(name: "UsageBarCore", targets: ["UsageBarCore"]),

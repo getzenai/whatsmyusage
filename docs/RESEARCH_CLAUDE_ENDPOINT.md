@@ -1,26 +1,28 @@
-# Claude-Endpunkte für die Usage Bar — live gemessen 2026-08-15
+# Claude endpoints for the usage bar — measured live 2026-08-15
 
-Gemessen gegen ein echtes Konto mit gültigem `sessionKey`. Nur lesende GETs.
-Alle kontobezogenen Werte (Org-UUIDs, Org-Namen, E-Mail, konkrete Prozentzahlen) sind hier
-durch Platzhalter ersetzt — dokumentiert ist die **Form** der Antwort, nicht ein Konto.
+Measured against a real account with a valid `sessionKey`. Read-only GETs.
+Every account-related value (org UUIDs, org names, email, concrete percentages) has been
+replaced by a placeholder here — what is documented is the **shape** of the response, not an
+account.
 
-## 1. Cloudflare blockt Nicht-Browser-Clients — aber nicht URLSession
+## 1. Cloudflare blocks non-browser clients — but not URLSession
 
 | Client | `/api/bootstrap` |
 |---|---|
-| python `urllib` (mit und ohne `cf_clearance`, Safari-UA) | **403** |
-| `curl` (mit `cf_clearance`, Safari-UA) | **403**, Body = Cloudflare Managed Challenge (`__cf_chl_rt_tk`) |
-| Swift `URLSession`, nur `Cookie: sessionKey=…`, kein UA gesetzt | **200** |
+| python `urllib` (with and without `cf_clearance`, Safari UA) | **403** |
+| `curl` (with `cf_clearance`, Safari UA) | **403**, body = Cloudflare Managed Challenge (`__cf_chl_rt_tk`) |
+| Swift `URLSession`, only `Cookie: sessionKey=…`, no UA set | **200** |
 
-Zwei Konsequenzen:
+Two consequences:
 
-- **Die App braucht nur `sessionKey`.** Kein `cf_clearance`, kein `lastActiveOrg`, kein UA-Spoofing.
-- **Endpunkte nie mit curl/python testen.** Ein 403 dort ist ein Fingerprint-Block, keine
-  Auth-Aussage. Jeder Spike gegen claude.ai läuft über URLSession.
+- **The app only needs `sessionKey`.** No `cf_clearance`, no `lastActiveOrg`, no UA spoofing.
+- **Never test endpoints with curl/python.** A 403 there is a fingerprint block, not a
+  statement about auth. Every spike against claude.ai goes through URLSession.
 
 ## 2. `/api/bootstrap` → `account.memberships[]`
 
-Ein Login kann mehrere Organisationen tragen, und **nicht jede ist ein Abo**. Beobachtete Formen:
+One login can carry several organizations, and **not every one is a subscription**. Observed
+shapes:
 
 | `rate_limit_tier` | `capabilities` | `/usage` |
 |---|---|---|
@@ -28,75 +30,77 @@ Ein Login kann mehrere Organisationen tragen, und **nicht jede ist ein Abo**. Be
 | `default_claude_max_20x` | `chat`, `claude_max` | 200 |
 | `auto_trust_tier_c` | `api` | **403** |
 
-Die dritte ist die API-Konsole, kein Abo. `/usage` antwortet dort
+The third one is the API console, not a subscription. `/usage` answers there with
 
 ```json
 {"type":"error","error":{"type":"permission_error","message":"Invalid authorization for organization"}}
 ```
 
-Das ist ein **403 mit gültigem Cookie**. „401/403 → Tracking abgelaufen" wäre hier falsch und
-würde ein Tracking grau schalten, dessen Cookie einwandfrei ist. Notwendige Unterscheidung:
+That is a **403 with a valid cookie**. "401/403 → tracking expired" would be wrong here and
+would grey out a tracking whose cookie is perfectly fine. The distinction that matters:
 
-- 401 überall, oder 403 auf `/api/bootstrap` → **Cookie abgelaufen**
-- 403 nur auf `/organizations/{id}/usage`, `type: permission_error` → **Org nicht trackbar**
+- 401 everywhere, or 403 on `/api/bootstrap` → **cookie expired**
+- 403 only on `/organizations/{id}/usage`, `type: permission_error` → **org not trackable**
 
-Im Org-Picker deshalb nur Orgs anbieten, deren `capabilities` `chat` enthält, und die 403-Antwort
-trotzdem sauber behandeln (Capabilities können sich ändern).
+So the org picker only offers orgs whose `capabilities` contain `chat`, and still handles the
+403 response cleanly (capabilities can change).
 
-## 3. Der Fall, für den es die App gibt — reproduziert
+## 3. The case the app exists for — reproduced
 
-Ein Max-Konto zum Messzeitpunkt:
+A Max account at the time of measurement:
 
 ```
 five_hour.utilization   =   0     resets_at = null
 seven_day.utilization   = 100     resets_at = <ts>
 limits[weekly_all]      = 100     severity = "critical", is_active = true
-limits[weekly_scoped/<Modell>] = 100  severity = "critical"
+limits[weekly_scoped/<model>] = 100  severity = "critical"
 ```
 
-Die verbreitete Leiste zeigt ausschließlich `five_hour` — also **0 %**, während das Wochenlimit
-voll und das Konto gesperrt ist. Kein Hörensagen, sondern ein Messwert.
+The widespread bar shows `five_hour` only — so **0 %**, while the weekly limit is full and the
+account is locked. Not hearsay, a measurement.
 
-## 4. Antwortstruktur `/organizations/{id}/usage`
+## 4. Response structure of `/organizations/{id}/usage`
 
-`limits[]` ist die reichere Quelle:
+`limits[]` is the richer source:
 
 ```json
 {"group":"weekly","kind":"weekly_scoped","percent":100,"is_active":false,
  "resets_at":"…","severity":"critical",
- "scope":{"model":{"display_name":"<Modell>","id":null},"surface":null}}
+ "scope":{"model":{"display_name":"<model>","id":null},"surface":null}}
 ```
 
-- `kind` ∈ `session` | `weekly_all` | `weekly_scoped` (bisher beobachtet)
+- `kind` ∈ `session` | `weekly_all` | `weekly_scoped` (observed so far)
 - `group` ∈ `session` | `weekly`
 - `scope == null` → **blocking**; `scope.model != null` → **model**
-- `severity` ∈ `normal` | `critical` — vom Anbieter, brauchbar als Kreuzprobe zur eigenen Schwelle
-- `is_active` markiert das *bindende* Limit, ist aber **nicht** dasselbe wie „voll":
-  beobachtet wurde ein Modell-Limit bei 24 % mit `is_active: true`, während `weekly_all` bei 14 %
-  auf `false` stand. **Nicht als Filter benutzen.**
-- `percent` kommt als **Int** (`1`, `14`, `24`, `100`) — Decoder muss Int **und** Double nehmen.
+- `severity` ∈ `normal` | `critical` — from the provider, useful as a cross-check against our
+  own threshold
+- `is_active` marks the *binding* limit, but is **not** the same as "full":
+  observed was a model limit at 24 % with `is_active: true`, while `weekly_all` sat at 14 %
+  with `false`. **Do not use it as a filter.**
+- `percent` arrives as an **Int** (`1`, `14`, `24`, `100`) — the decoder has to accept Int
+  **and** Double.
 
-Top-Level-Schlüssel duplizieren `limits[]`: `five_hour` == `limits[kind=session]`,
-`seven_day` == `limits[kind=weekly_all]`. Beide tragen zusätzlich
-`limit_dollars`/`used_dollars`/`remaining_dollars` (hier durchgehend `null`).
+Top-level keys duplicate `limits[]`: `five_hour` == `limits[kind=session]`,
+`seven_day` == `limits[kind=weekly_all]`. Both additionally carry
+`limit_dollars`/`used_dollars`/`remaining_dollars` (all `null` here).
 
-`seven_day_sonnet`, `seven_day_opus` sind **null** — Modelllimits stehen nur noch in `limits[]`.
-`limits[]` ist also nicht Zukunftsvorsorge, sondern heute schon die einzige Quelle dafür.
+`seven_day_sonnet`, `seven_day_opus` are **null** — model limits now live in `limits[]` only.
+So `limits[]` is not future-proofing, it is already today the single source for them.
 
-Weitere Top-Level-Schlüssel, alle `null`, offenbar unveröffentlichte Buckets:
+Further top-level keys, all `null`, apparently unreleased buckets:
 `amber_ladder`, `cinder_cove`, `iguana_necktie`, `nimbus_quill`, `omelette_promotional`,
 `tangelo`, `seven_day_cowork`, `seven_day_oauth_apps`, `seven_day_omelette`.
-**Bestätigt die generische Verarbeitung** — wer diese Namen hardcodet, schreibt Code für Buckets,
-die es morgen anders gibt.
+**This confirms generic handling** — hardcoding those names means writing code for buckets that
+will look different tomorrow.
 
-`extra_usage` und `spend` beschreiben Guthaben/Overage. `spend.percent` und
-`extra_usage.utilization` wären eigene Buckets; für v1 nicht nötig, aber vorhanden — ein
-separater `/prepaid/credits`-Aufruf ist damit womöglich überflüssig.
+`extra_usage` and `spend` describe credit/overage. `spend.percent` and
+`extra_usage.utilization` would be buckets of their own; not needed for v1, but present — which
+may well make a separate `/prepaid/credits` call unnecessary.
 
-## Was daraus folgt
+## What follows from this
 
-1. Cookie-Eingabe braucht **nur** `sessionKey`; `lastActiveOrg` ist bequem, nicht nötig.
-2. Fehlerbehandlung: 403 auf `/usage` ≠ abgelaufen. Eigener Zustand „Org nicht trackbar".
-3. `parseUsage` liest `limits[]` als Primärquelle, `scope` entscheidet blocking vs. model,
-   `percent` als Int **oder** Double, unbekannte `kind`-Werte werden durchgereicht statt verworfen.
-4. `severity` mitnehmen — kostenlos, und der Anbieter weiß selbst am besten, was kritisch ist.
+1. Cookie entry needs **only** `sessionKey`; `lastActiveOrg` is convenient, not required.
+2. Error handling: 403 on `/usage` ≠ expired. It gets its own state, "org not trackable".
+3. `parseUsage` reads `limits[]` as the primary source, `scope` decides blocking vs. model,
+   `percent` as Int **or** Double, unknown `kind` values pass through instead of being dropped.
+4. Take `severity` along — it is free, and the provider knows best what counts as critical.

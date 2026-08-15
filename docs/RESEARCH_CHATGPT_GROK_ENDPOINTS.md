@@ -1,30 +1,29 @@
-# ChatGPT- und Grok-Endpunkte — live gemessen 2026-08-15
+# ChatGPT and Grok endpoints — measured live 2026-08-15
 
-Gemessen durch Mitschnitt des echten Browserverkehrs (Chrome DevTools Protocol, siehe
-„Methode" unten). Alle kontobezogenen Werte sind durch Platzhalter ersetzt.
+Measured by capturing real browser traffic (Chrome DevTools Protocol, see "Method" below).
+Every account-related value has been replaced by a placeholder.
 
 ## ChatGPT
 
-**Der Endpunkt ist `GET https://chatgpt.com/backend-api/wham/usage` — aber Cookies allein
-reichen nicht.** Es sind zwei Schritte:
+**The endpoint is `GET https://chatgpt.com/backend-api/wham/usage` — but cookies alone are not
+enough.** It takes two steps:
 
-1. `GET https://chatgpt.com/api/auth/session` mit den `session-token`-Cookies → Feld `accessToken`
-2. `GET /backend-api/wham/usage` mit **`Authorization: Bearer <accessToken>`** (die Cookies dürfen
-   mitgehen, tragen aber nicht)
+1. `GET https://chatgpt.com/api/auth/session` with the `session-token` cookies → field `accessToken`
+2. `GET /backend-api/wham/usage` with **`Authorization: Bearer <accessToken>`** (the cookies may
+   ride along, but they carry nothing)
 
-**Ohne den Bearer antwortet `/backend-api/` mit 401 — auch mit dem vollständigen Cookie-Satz.**
-Live gemessen: Token allein 401, Token + `__Secure-oai-is` 401, Token + `cf_clearance` 401,
-**alle 22 Cookies der Domain** 401; mit Bearer 200. Für Schritt 1 genügen die beiden
-`__Secure-next-auth.session-token.N`.
+**Without the bearer, `/backend-api/` answers 401 — even with the complete cookie set.**
+Measured live: token alone 401, token + `__Secure-oai-is` 401, token + `cf_clearance` 401,
+**all 22 cookies of the domain** 401; with bearer 200. For step 1 the two
+`__Secure-next-auth.session-token.N` are enough.
 
-Das ist die Falle dieser Messmethode: der Browser hängt den `Authorization`-Header selbst an, und
-ein Mitschnitt, der bewusst keine Header aufzeichnet, sieht davon nichts. **Ein aufgezeichneter
-Aufruf beweist die Adresse, nicht die Berechtigung.** Wer hier nur die URL übernimmt, baut ein
-Tracking, das dauerhaft „abgelaufen" anzeigt, obwohl die Anmeldung einwandfrei ist.
+That is the trap of this measurement method: the browser attaches the `Authorization` header
+itself, and a capture that deliberately records no headers sees nothing of it. **A recorded call
+proves the address, not the authorization.** Copy just the URL here and you build a tracking that
+permanently reads "expired" while the login is perfectly fine.
 
-Die Usage-Ansicht selbst ist eine reine Client-Route (`chatgpt.com/#settings/Usage`) — der Server
-sieht sie nie. Beim Aufbau der Seite laufen ~50 Aufrufe unter `/backend-api/`; nur einer trägt die
-Zahlen.
+The usage view itself is a pure client route (`chatgpt.com/#settings/Usage`) — the server never
+sees it. Building the page fires ~50 calls under `/backend-api/`; only one carries the numbers.
 
 ```json
 {
@@ -51,79 +50,79 @@ Zahlen.
 }
 ```
 
-Bemerkenswert:
+Worth noting:
 
-- **`used_percent` kommt fertig** — anders als bei Grok muss nichts gerechnet werden.
-- **`primary_window` / `secondary_window`** sind das Gegenstück zu Claudes `five_hour` /
-  `seven_day`. `limit_window_seconds: 604800` = eine Woche. `secondary_window` war hier `null`;
-  die App darf sich also nicht darauf verlassen, dass beide existieren.
-- **`reset_at` ist ein Unix-Zeitstempel**, `reset_after_seconds` dieselbe Information relativ.
-- **`allowed: false` ist das ehrlichste Feld der ganzen API** — der Anbieter sagt selbst, ob
-  gerade noch etwas geht. Genau das gehört in die Leiste, nicht nur eine Prozentzahl.
-- `plan_type` unterscheidet `team`/`plus`/`pro`; die Ansicht ist kontobezogen, nicht nutzerbezogen.
+- **`used_percent` arrives ready-made** — unlike Grok, nothing has to be computed.
+- **`primary_window` / `secondary_window`** are the counterpart to Claude's `five_hour` /
+  `seven_day`. `limit_window_seconds: 604800` = one week. `secondary_window` was `null` here, so
+  the app must not rely on both existing.
+- **`reset_at` is a Unix timestamp**, `reset_after_seconds` the same information relative.
+- **`allowed: false` is the most honest field in the whole API** — the provider itself says
+  whether anything still works right now. That is what belongs in the bar, not a percentage alone.
+- `plan_type` distinguishes `team`/`plus`/`pro`; the view is account-scoped, not user-scoped.
 
-Ergänzende Endpunkte, für v1 nicht nötig:
+Supplementary endpoints, not needed for v1:
 
-| Endpunkt | Inhalt |
+| Endpoint | Content |
 |---|---|
-| `GET /backend-api/wham/rate-limit-reset-credits` | „Reset available"-Guthaben: `available_count`, `immediate_reset_purchase_eligible` |
-| `GET /backend-api/accounts/{accountId}/remaining_balance` | Guthaben als String (`"0"`) |
-| `GET /backend-api/pageConfigs/usage_limits` | steuert nur, was die Web-UI anzeigt |
+| `GET /backend-api/wham/rate-limit-reset-credits` | "Reset available" credit: `available_count`, `immediate_reset_purchase_eligible` |
+| `GET /backend-api/accounts/{accountId}/remaining_balance` | balance as a string (`"0"`) |
+| `GET /backend-api/pageConfigs/usage_limits` | only controls what the web UI displays |
 
 ## Grok
 
-**Der Endpunkt ist `POST https://grok.com/rest/rate-limits` mit `{"modelName":"<modell>"}`.**
+**The endpoint is `POST https://grok.com/rest/rate-limits` with `{"modelName":"<model>"}`.**
 
-> **Nachtrag 15.08.: das ist nur das Kurzfrist-Fenster.** Das Wochenlimit, das die Grok-Oberfläche
-> anzeigt, steht hier nicht drin und kann hoch stehen, während alle 2-h-Fenster auf 0 % sind.
-> Quelle und Kodierung: `RESEARCH_GROK_WEEKLY_LIMIT.md`.
+> **Addendum 2026-08-15: this is the short-term window only.** The weekly limit that Grok's UI
+> shows is not in here and can sit high while every 2 h window reads 0 %.
+> Source and encoding: `RESEARCH_GROK_WEEKLY_LIMIT.md`.
 
 ```json
 {"windowSizeSeconds": 7200, "remainingQueries": 270, "totalQueries": 270,
  "lowEffortRateLimits": null, "highEffortRateLimits": null}
 ```
 
-Drei Unterschiede, die für die App zählen:
+Three differences that matter for the app:
 
-1. **Grok zählt Anfragen, keine Prozente.** Auslastung = `1 - remainingQueries / totalQueries`.
-   Der Anbieter sagt nicht, ob man gesperrt ist — das muss die App aus `remainingQueries == 0`
-   selbst schließen.
-2. **Ein Aufruf pro Modell.** `modelName` ist Pflicht (beobachtet: `fast`). Für mehrere Modelle
-   braucht die App mehrere Aufrufe, nicht einen.
-3. **`windowSizeSeconds` statt `reset_at`** — es gibt keinen Zeitpunkt, nur eine Fensterlänge
-   (hier 2 h). Ein „setzt zurück um …" lässt sich daraus **nicht** ableiten.
+1. **Grok counts requests, not percentages.** Utilization = `1 - remainingQueries / totalQueries`.
+   The provider does not say whether you are locked out — the app has to infer that from
+   `remainingQueries == 0` itself.
+2. **One call per model.** `modelName` is required (observed: `fast`). Several models mean
+   several calls, not one.
+3. **`windowSizeSeconds` instead of `reset_at`** — there is no point in time, only a window
+   length (2 h here). A "resets at …" **cannot** be derived from it.
 
-**Die „Reset available"-Anzeige ist teuer.** Sie kommt aus
-`POST /prod_mc_billing.ConsumerUiSvc/GetRemainingResets`, und das ist **gRPC-Web mit
-Protobuf-Kodierung** (`application/grpc-web+proto`), nicht JSON. Ohne die `.proto`-Definitionen
-ist das in Swift erheblicher Aufwand. **Für v1 draußen lassen** — dieselbe Kodierung gilt für
-alle `ConsumerUiSvc`- und `GrokBuildBilling`-Aufrufe (Zahlungsmittel, Guthaben, Auto-Top-up).
+**The "Reset available" display is expensive.** It comes from
+`POST /prod_mc_billing.ConsumerUiSvc/GetRemainingResets`, and that is **gRPC-Web with protobuf
+encoding** (`application/grpc-web+proto`), not JSON. Without the `.proto` definitions that is
+considerable work in Swift. **Leave it out for v1** — the same encoding applies to every
+`ConsumerUiSvc` and `GrokBuildBilling` call (payment methods, balance, auto top-up).
 
-## Was die drei Anbieter gemeinsam haben — und was nicht
+## What the three providers have in common — and what they don't
 
 | | Claude | ChatGPT | Grok |
 |---|---|---|---|
-| Auslastung | `percent` (Int) | `used_percent` | selbst rechnen aus `remaining/total` |
-| gesperrt? | aus `percent == 100` schließen | **`allowed`** direkt | aus `remainingQueries == 0` schließen |
-| Zurücksetzung | `resets_at` (ISO) | `reset_at` (Unix) | nur Fensterlänge |
-| mehrere Limits | `limits[]` in einer Antwort | `primary`/`secondary_window` | ein Aufruf **pro Modell** |
-| Kontoauswahl | Organisation | Account | — |
+| utilization | `percent` (Int) | `used_percent` | compute from `remaining/total` |
+| locked? | infer from `percent == 100` | **`allowed`** directly | infer from `remainingQueries == 0` |
+| reset | `resets_at` (ISO) | `reset_at` (Unix) | window length only |
+| several limits | `limits[]` in one response | `primary`/`secondary_window` | one call **per model** |
+| account selection | organization | account | — |
 
-Folge für den Kern der App: ein gemeinsames Modell aus (Bezeichnung, Auslastung 0…1,
-Zurücksetzung optional, gesperrt ja/nein/unbekannt) und **pro Anbieter ein Übersetzer**. Der
-kleinste gemeinsame Nenner ist die Auslastung; alles andere fehlt bei mindestens einem Anbieter.
+Consequence for the core of the app: one common model of (label, utilization 0…1, optional
+reset, locked yes/no/unknown) and **one translator per provider**. The smallest common
+denominator is utilization; everything else is missing at at least one provider.
 
-## Methode — Verkehr mitschneiden, ohne Cookies weiterzureichen
+## Method — capture traffic without passing cookies on
 
-1. Chrome mit **eigenem Profil** starten: `--remote-debugging-port=9222
-   --user-data-dir=/tmp/chrome-cdp`. **Ab Chrome 136 ignoriert Chrome die Fernsteuerung auf dem
-   Standardprofil** — bewusste Härtung, kein Fehler. In diesem Profil einmal anmelden.
-2. Über das DevTools-Protokoll an **alle** Ziele hängen, nicht nur an die Seite: Settings-Ansichten
-   laufen in eigenen Kontexten (iframe/Worker). Wer nur am Hauptdokument lauscht, sieht ~50 von
-   ~80 Aufrufen — und der gesuchte ist im fehlenden Drittel.
-3. `Debugger.setSkipAllPauses` setzen: claude.ai enthält eine Anti-Debugger-Falle (`debugger;`),
-   die die Seite einfriert, sobald ein Debugger hängt.
-4. Hash-Routen laden bei `Page.navigate` auf dieselbe Adresse **nicht** neu — Reload erzwingen.
+1. Start Chrome with its **own profile**: `--remote-debugging-port=9222
+   --user-data-dir=/tmp/chrome-cdp`. **From Chrome 136 on, Chrome ignores remote control on the
+   default profile** — deliberate hardening, not a bug. Log in once inside that profile.
+2. Attach to **all** targets over the DevTools protocol, not just the page: settings views run in
+   their own contexts (iframe/worker). Listen to the main document only and you see ~50 of ~80
+   calls — and the one you want is in the missing third.
+3. Set `Debugger.setSkipAllPauses`: claude.ai contains an anti-debugger trap (`debugger;`) that
+   freezes the page as soon as a debugger attaches.
+4. Hash routes do **not** reload on `Page.navigate` to the same address — force a reload.
 
-Der Mitschnitt hält Adressen, Anfragekörper und Antwortkörper fest, **keine Header und keine
-Cookies**. Für die App wird die Form der Antwort gebraucht, nie der Schlüssel.
+The capture records addresses, request bodies and response bodies, **no headers and no cookies**.
+What the app needs is the shape of the response, never the key.
