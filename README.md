@@ -57,8 +57,9 @@ right-click → Open (self-signed, Gatekeeper). After that the Keychain asks
 once, then stays quiet across rebuilds.
 
 The app is a menu bar accessory (no Dock icon). UI is English. First launch is a
-short wizard: welcome (Keychain warning) → paste cookies → here’s what we found
-→ close and use the bar. Chrome: log in → right-click Inspect / ⌥⌘I → Application
+short wizard: welcome (Keychain warning + preview of the macOS prompt) → paste
+cookies (Continue stores them) → here’s what we found → close and use the bar.
+The bundle version is the git short hash, shown in Settings and the popover. Chrome: log in → right-click Inspect / ⌥⌘I → Application
 → Storage → Cookies → the site (claude.ai and a.claude.ai are separate) → ⌘A ⌘C.
 Paste in the window. Only the session keys go into the Keychain; the rest of the
 paste is discarded. Two logins of the same provider (two Claude Max emails) are

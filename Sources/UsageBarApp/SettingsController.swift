@@ -65,7 +65,7 @@ final class SettingsController: NSObject, NSWindowDelegate {
         let window = NSWindow(contentViewController: hosting)
         window.title = "AI Usage Bar"
         window.styleMask = [.titled, .closable, .resizable]
-        window.setContentSize(NSSize(width: 640, height: 560))
+        window.setContentSize(NSSize(width: 640, height: 620))
         window.delegate = self
         window.isReleasedWhenClosed = false
         window.center()
@@ -106,6 +106,21 @@ final class SettingsController: NSObject, NSWindowDelegate {
             },
             moveAccount: { [weak self] trackingID, delta in
                 self?.mutatePrefs { $0.move(trackingID: trackingID, by: delta, among: self?.model.cards ?? []) }
+            },
+            reorder: { [weak self] source, destination in
+                self?.mutatePrefs { $0.move(from: source, to: destination, among: self?.model.cards ?? []) }
+            },
+            requestDelete: { [weak self] trackingID in
+                self?.requestDelete(trackingID)
+            },
+            confirmDelete: { [weak self] in
+                self?.confirmDelete()
+            },
+            cancelDelete: { [weak self] in
+                self?.model.showingDeleteConfirm = false
+                self?.model.pendingDeleteID = nil
+                self?.model.pendingDeleteMessage = ""
+                self?.syncRoot()
             },
             rename: { [weak self] trackingID, name in
                 AccountNames.setName(name, for: trackingID)
@@ -156,11 +171,23 @@ final class SettingsController: NSObject, NSWindowDelegate {
     }
 
     private func save() {
+        let trimmed = model.pasteText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            if !KeychainStore.load().isEmpty {
+                model.step = .detected
+                syncRoot()
+                return
+            }
+            model.success = nil
+            model.status = "Paste cookies first."
+            syncRoot()
+            return
+        }
         do {
             let extracted = try SessionCookies.extractSessionKey(from: model.pasteText)
             KeychainStore.save(extracted)
             model.pasteText = ""
-            model.success = "Saved to the Keychain — \(summary(of: extracted))."
+            model.success = "Kept only the session keys — \(summary(of: extracted))."
             model.status = ""
             model.refreshKeychainSummary()
             model.advanceAfterRefresh = true
@@ -178,6 +205,37 @@ final class SettingsController: NSObject, NSWindowDelegate {
         model.success = nil
         model.status = "Keychain cleared."
         model.cards = []
+        model.refreshKeychainSummary()
+        syncRoot()
+        onSaved?()
+    }
+
+    private func requestDelete(_ trackingID: String) {
+        let store = KeychainStore.load()
+        let deletion = store.deletion(of: trackingID, cards: model.cards) { id, fallback in
+            AccountNames.name(for: id, default: fallback)
+        }
+        model.pendingDeleteID = trackingID
+        model.pendingDeleteMessage = deletion?.message
+            ?? "Removes this login from the Keychain."
+        model.showingDeleteConfirm = true
+        syncRoot()
+    }
+
+    private func confirmDelete() {
+        // Do not clear pendingDeleteID when the alert dismisses — SwiftUI sets
+        // isPresented to false before the destructive button action runs.
+        guard let trackingID = model.pendingDeleteID else { return }
+        model.showingDeleteConfirm = false
+        model.pendingDeleteID = nil
+        model.pendingDeleteMessage = ""
+        KeychainStore.remove(trackingID: trackingID)
+        let store = KeychainStore.load()
+        model.cards.removeAll { card in
+            !store.accounts.contains { $0.owns(trackingID: card.trackingID) }
+        }
+        model.success = nil
+        model.status = ""
         model.refreshKeychainSummary()
         syncRoot()
         onSaved?()
@@ -209,6 +267,9 @@ final class OnboardingModel {
     var cards: [AccountCard] = []
     var advanceAfterRefresh = false
     var prefs = DisplayPreferences()
+    var pendingDeleteID: String?
+    var pendingDeleteMessage: String = ""
+    var showingDeleteConfirm = false
 
     func refreshKeychainSummary() {
         let store = KeychainStore.load()
@@ -235,6 +296,10 @@ struct OnboardingActions {
     var toggleLimit: (String, String) -> Void
     var toggleAccount: (String) -> Void
     var moveAccount: (String, Int) -> Void
+    var reorder: (IndexSet, Int) -> Void
+    var requestDelete: (String) -> Void
+    var confirmDelete: () -> Void
+    var cancelDelete: () -> Void
     var rename: (String, String) -> Void
     var welcomeContinued: () -> Void
 }
@@ -288,19 +353,16 @@ struct OnboardingRoot: View {
             Text("Welcome to AI Usage Bar")
                 .font(.system(size: 22, weight: .semibold))
                 .foregroundStyle(.primary)
-            Text("Every AI subscription, in the menu bar. One glance tells you whether you can still work — Claude, ChatGPT, and Grok, including every organisation behind the same login.")
+            Text("At a glance you can see how much longer your agents can keep working — Claude, ChatGPT, and Grok, including every organisation behind the same login.")
                 .font(.system(size: 14))
                 .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
-            Text("Paste cookies once. Only the session keys go into the Keychain. The rest of the paste is thrown away.")
+            Text("On Continue, macOS will ask for Keychain access. The app uses it to store and read the session keys — nothing else.")
                 .font(.system(size: 13))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            Text("On the next step the app will ask macOS for Keychain access, so it can store those keys. Nothing is written until you paste and save.")
-                .font(.system(size: 13))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            Spacer()
+            KeychainPromptPreview()
+            Spacer(minLength: 0)
         }
     }
 
@@ -309,14 +371,14 @@ struct OnboardingRoot: View {
             Text("Paste your cookies")
                 .font(.system(size: 20, weight: .semibold))
                 .foregroundStyle(.primary)
+            Text("Copy every cookie from the browser and paste them here. We extract only the ones we need to read usage — you do not have to pick them out.")
+                .font(.system(size: 13))
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
             Text(instructions)
                 .font(.system(size: 12))
                 .foregroundStyle(.primary)
                 .textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
-            Text("Only the session keys are saved to the Keychain (Claude sessionKey, ChatGPT session-token, Grok sso). Everything else in the paste is stripped and discarded.")
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             CookieEditor(text: $model.pasteText)
                 .frame(maxWidth: .infinity, minHeight: 160, maxHeight: .infinity)
@@ -341,7 +403,7 @@ struct OnboardingRoot: View {
             Text("Here’s what we found")
                 .font(.system(size: 20, weight: .semibold))
                 .foregroundStyle(.primary)
-            Text("One card per account. Click a name to rename it. The eye hides a row from the popover and the pill; the arrows set the order of both.")
+            Text("We already picked out the relevant cookies for you. Only those session keys are stored in the Keychain; everything else from the paste was thrown away. Drag a row to set the order of the popover and the pill. The eye hides a limit. Trash removes the whole login — every organisation that cookie feeds — and asks first.")
                 .font(.system(size: 13))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -355,23 +417,26 @@ struct OnboardingRoot: View {
                     .font(.system(size: 13))
                     .foregroundStyle(.primary)
             } else {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 0) {
-                        ForEach(Array(model.prefs.ordered(model.cards).enumerated()), id: \.element.id) { index, card in
-                            DetectedCard(
-                                card: card,
-                                prefs: model.prefs,
-                                canMoveUp: index > 0,
-                                canMoveDown: index + 1 < model.cards.count,
-                                actions: actions
-                            )
-                            Divider().opacity(0.3)
-                        }
+                List {
+                    ForEach(model.prefs.ordered(model.cards)) { card in
+                        DetectedCard(card: card, prefs: model.prefs, actions: actions)
+                            .listRowInsets(EdgeInsets(top: 4, leading: 8, bottom: 4, trailing: 8))
+                            .listRowSeparator(.visible)
+                            .listRowBackground(Color.clear)
                     }
+                    .onMove { actions.reorder($0, $1) }
                 }
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
                 .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
             }
             Spacer(minLength: 0)
+        }
+        .alert("Remove this login?", isPresented: $model.showingDeleteConfirm) {
+            Button("Remove login", role: .destructive, action: actions.confirmDelete)
+            Button("Cancel", role: .cancel, action: actions.cancelDelete)
+        } message: {
+            Text(model.pendingDeleteMessage)
         }
     }
 
@@ -400,13 +465,12 @@ struct OnboardingRoot: View {
         HStack {
             if model.step == .paste {
                 Button("Paste", action: actions.pasteFromClipboard)
-                Button("Save to Keychain", action: actions.save)
-                    .keyboardShortcut(.defaultAction)
-                Button("Clear Keychain", action: actions.clear)
             } else if model.step == .detected {
                 Button("Add cookies") { model.step = .paste }
-                Button("Clear Keychain", action: actions.clear)
             }
+            Text(AppVersion.label)
+                .font(.system(size: 11).monospacedDigit())
+                .foregroundStyle(.tertiary)
             Spacer()
             if model.step != .welcome {
                 Button("Back") { go(-1) }
@@ -416,6 +480,7 @@ struct OnboardingRoot: View {
                     .keyboardShortcut(.defaultAction)
             } else if model.step == .paste {
                 Button("Continue") { go(1) }
+                    .keyboardShortcut(.defaultAction)
             } else {
                 Button("Continue") { go(1) }
                     .keyboardShortcut(.defaultAction)
@@ -428,6 +493,10 @@ struct OnboardingRoot: View {
     private func go(_ delta: Int) {
         if model.step == .welcome, delta == 1 {
             actions.welcomeContinued()
+            return
+        }
+        if model.step == .paste, delta == 1 {
+            actions.save()
             return
         }
         let next = model.step.rawValue + delta
@@ -456,7 +525,7 @@ struct OnboardingRoot: View {
         Safari: Safari → Settings → Advanced → “Show features for web developers”, then Develop → Show Web Inspector → Storage → Cookies.
         Firefox: right-click → Inspect → Storage → Cookies.
 
-        Claude needs sessionKey, ChatGPT the numbered session-token.* parts, Grok sso.
+        Copy the whole table. Continue stores only the session keys.
         """
     }
 }
@@ -464,8 +533,6 @@ struct OnboardingRoot: View {
 private struct DetectedCard: View {
     let card: AccountCard
     let prefs: DisplayPreferences
-    var canMoveUp: Bool
-    var canMoveDown: Bool
     let actions: OnboardingActions
     @State private var draft: String = ""
     @State private var editing = false
@@ -481,20 +548,12 @@ private struct DetectedCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
-                VStack(spacing: 0) {
-                    Button { actions.moveAccount(card.trackingID, -1) } label: {
-                        Image(systemName: "chevron.up")
-                    }
-                    .disabled(!canMoveUp)
-                    Button { actions.moveAccount(card.trackingID, 1) } label: {
-                        Image(systemName: "chevron.down")
-                    }
-                    .disabled(!canMoveDown)
-                }
-                .buttonStyle(.borderless)
-                .font(.system(size: 9, weight: .semibold))
-                .foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+                Image(systemName: "line.3.horizontal")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 22, height: 22)
+                    .help("Drag to reorder")
 
                 if editing {
                     TextField("Name", text: $draft)
@@ -530,6 +589,16 @@ private struct DetectedCard: View {
                 ) {
                     actions.toggleAccount(card.trackingID)
                 }
+                Button {
+                    actions.requestDelete(card.trackingID)
+                } label: {
+                    Image(systemName: "trash")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 22, height: 22)
+                }
+                .buttonStyle(.borderless)
+                .help("Remove the login this card belongs to")
             }
             ForEach(card.limits) { limit in
                 let visible = prefs.isLimitVisible(trackingID: card.trackingID, limitID: limit.id)
@@ -571,6 +640,51 @@ private struct DetectedCard: View {
         editing = false
         nameFocused = false
         actions.rename(card.trackingID, draft)
+    }
+}
+
+/// Visual stand-in for the macOS Keychain sheet. People skip the paragraph;
+/// they recognise the buttons.
+private struct KeychainPromptPreview: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "key.fill")
+                    .font(.system(size: 28))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 36, height: 36)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("AI Usage Bar wants to use your confidential information stored in “credentials” in your keychain.")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("That is where session keys are stored and read. Always Allow is fine.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            HStack {
+                Spacer()
+                previewButton("Always Allow")
+                previewButton("Deny")
+                previewButton("Allow")
+            }
+        }
+        .padding(14)
+        .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 10))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
+        )
+    }
+
+    private func previewButton(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 12, weight: .medium))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(Color.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
     }
 }
 

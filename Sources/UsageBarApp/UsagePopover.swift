@@ -28,6 +28,9 @@ struct UsagePopoverView: View {
                 Button("Refresh", action: onRefresh)
                 Button("Settings…", action: onCookies)
                 Spacer()
+                Text(AppVersion.label)
+                    .font(.system(size: 11).monospacedDigit())
+                    .foregroundStyle(.tertiary)
                 Button("Quit", action: onQuit)
             }
             .buttonStyle(.borderless)

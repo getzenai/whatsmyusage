@@ -55,6 +55,17 @@ public struct DisplayPreferences: Equatable, Sendable {
         accountOrder = ids
     }
 
+    public mutating func move(from source: IndexSet, to destination: Int, among cards: [AccountCard]) {
+        var ids = ordered(cards).map(\.trackingID)
+        let moving = source.sorted().map { ids[$0] }
+        for index in source.sorted().reversed() {
+            ids.remove(at: index)
+        }
+        let dest = min(max(0, destination - source.filter { $0 < destination }.count), ids.count)
+        ids.insert(contentsOf: moving, at: dest)
+        accountOrder = ids
+    }
+
     /// Cards for the popover and the pill. Hidden rows stay in Settings.
     public func applied(to cards: [AccountCard]) -> [AccountCard] {
         let visible = cards.compactMap { card -> AccountCard? in

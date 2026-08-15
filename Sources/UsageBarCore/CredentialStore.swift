@@ -7,17 +7,32 @@ public struct CredentialAccount: Equatable, Sendable, Identifiable {
     public var claude: ClaudeCredentials?
     public var chatGPT: ChatGPTCredentials?
     public var grok: GrokCredentials?
+    /// Org UUIDs last seen on this Claude login. Used to delete the right cookie
+    /// when the card's tracking id is `claude:{org}`.
+    public var claudeOrgIDs: Set<String>
 
     public init(
         id: String,
         claude: ClaudeCredentials? = nil,
         chatGPT: ChatGPTCredentials? = nil,
-        grok: GrokCredentials? = nil
+        grok: GrokCredentials? = nil,
+        claudeOrgIDs: Set<String> = []
     ) {
         self.id = id
         self.claude = claude
         self.chatGPT = chatGPT
         self.grok = grok
+        self.claudeOrgIDs = claudeOrgIDs
+    }
+
+    public func owns(trackingID: String) -> Bool {
+        if trackingID == "chatgpt:\(id)" { return chatGPT != nil }
+        if trackingID == "grok:\(id)" { return grok != nil }
+        if trackingID == "claude:account:\(id)" { return claude != nil }
+        guard trackingID.hasPrefix("claude:"), claude != nil else { return false }
+        let org = String(trackingID.dropFirst("claude:".count))
+        if org.hasPrefix("account:") { return false }
+        return claude?.lastActiveOrg == org || claudeOrgIDs.contains(org)
     }
 
     public var provider: Provider {
@@ -43,6 +58,19 @@ public struct CredentialStore: Equatable, Sendable {
     }
 
     public var isEmpty: Bool { accounts.isEmpty }
+
+    public func removing(trackingID: String) -> CredentialStore {
+        CredentialStore(accounts: accounts.filter { !$0.owns(trackingID: trackingID) })
+    }
+
+    public func stampingClaudeOrgs(_ orgIDsByAccountID: [String: Set<String>]) -> CredentialStore {
+        CredentialStore(accounts: accounts.map { account in
+            guard let orgs = orgIDsByAccountID[account.id], !orgs.isEmpty else { return account }
+            var next = account
+            next.claudeOrgIDs = orgs
+            return next
+        })
+    }
 }
 
 /// Decide whether a newly pasted cookie is a new login or a refresh of one
@@ -115,5 +143,48 @@ public enum CredentialMerge {
         }
 
         return CredentialStore(accounts: keep.reversed())
+    }
+}
+
+/// What the trash will actually throw away. One cookie, every card it feeds.
+public struct LoginDeletion: Equatable, Sendable {
+    public let provider: Provider
+    public let names: [String]
+
+    public init(provider: Provider, names: [String]) {
+        self.provider = provider
+        self.names = names
+    }
+
+    public var message: String {
+        "Removes the \(provider.displayName) login for \(Self.list(names))."
+    }
+
+    public static func list(_ names: [String]) -> String {
+        switch names.count {
+        case 0: return "this login"
+        case 1: return names[0]
+        case 2: return "\(names[0]) and \(names[1])"
+        default:
+            return names.dropLast().joined(separator: ", ") + ", and \(names[names.count - 1])"
+        }
+    }
+}
+
+public extension CredentialStore {
+    func deletion(
+        of trackingID: String,
+        cards: [AccountCard],
+        displayName: (String, String) -> String = { _, fallback in fallback }
+    ) -> LoginDeletion? {
+        guard let account = accounts.first(where: { $0.owns(trackingID: trackingID) }) else {
+            return nil
+        }
+        let doomed = cards.filter { account.owns(trackingID: $0.trackingID) }
+        let names = doomed.map { displayName($0.trackingID, $0.defaultName) }
+        return LoginDeletion(
+            provider: account.provider,
+            names: names.isEmpty ? ["this login"] : names
+        )
     }
 }
