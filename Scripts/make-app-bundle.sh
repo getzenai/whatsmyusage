@@ -6,10 +6,9 @@
 #
 # Usage: Scripts/make-app-bundle.sh [debug|release]   (default: release)
 #
-# Sign with a stable identity so Keychain does not treat every rebuild as a
-# new app. Override with USAGE_BAR_SIGN_IDENTITY. If unset, the script uses
-# "Helios Local Signing" when that certificate is in the Keychain, otherwise
-# ad-hoc (`-`). Ad-hoc identity is the binary hash — it changes every build.
+# Sign with USAGE_BAR_SIGN_IDENTITY when set. Unset means ad-hoc (`-`): the
+# identity is the binary hash, so Keychain treats every rebuild as a new app.
+# See README for making a local code-signing certificate in two minutes.
 set -euo pipefail
 
 CONFIGURATION="${1:-release}"
@@ -63,15 +62,7 @@ cat > "$APP_PATH/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
-if [ -n "${USAGE_BAR_SIGN_IDENTITY:-}" ]; then
-    SIGN_IDENTITY="$USAGE_BAR_SIGN_IDENTITY"
-elif security find-certificate -c "Helios Local Signing" >/dev/null 2>&1; then
-    # find-identity -v can list zero identities even when the Helios cert
-    # is present (key not yet unlocked). Prefer the named cert over ad-hoc.
-    SIGN_IDENTITY="Helios Local Signing"
-else
-    SIGN_IDENTITY="-"
-fi
+SIGN_IDENTITY="${USAGE_BAR_SIGN_IDENTITY:--}"
 echo "==> Signing with identity: $SIGN_IDENTITY"
 codesign --force --sign "$SIGN_IDENTITY" --timestamp=none "$APP_PATH"
 codesign --verify --verbose=2 "$APP_PATH"

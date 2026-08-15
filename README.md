@@ -42,17 +42,19 @@ Scripts/make-app-bundle.sh        # → .build/AI Usage Bar.app
 open ".build/AI Usage Bar.app"
 ```
 
-Sign with a stable identity. Ad-hoc (`-`, the script default when no
-certificate is present) makes the Keychain treat every rebuild as a new app
-and prompt again. On this machine the script picks `Helios Local Signing`
-when that certificate is in the Keychain. Override with:
+Without `USAGE_BAR_SIGN_IDENTITY` the bundle is ad-hoc signed. That identity
+is the binary hash, so Keychain treats every rebuild as a new app and prompts
+again. A named certificate stays put:
 
 ```
-USAGE_BAR_SIGN_IDENTITY="Helios Local Signing" Scripts/make-app-bundle.sh
+USAGE_BAR_SIGN_IDENTITY="AI Usage Bar Local" Scripts/make-app-bundle.sh
 ```
 
-The first open of a newly signed build still needs right-click → Open
-(self-signed, Gatekeeper). After that the Keychain asks once, then stays quiet.
+Make one in two minutes: Keychain Access → Certificate Assistant → Create a
+Certificate… → name it (this is the identity string), Identity Type **Self
+Signed Root**, Certificate Type **Code Signing**. The first open still needs
+right-click → Open (self-signed, Gatekeeper). After that the Keychain asks
+once, then stays quiet across rebuilds.
 
 The app is a menu bar accessory (no Dock icon). UI is English. First launch is a
 short wizard: welcome (Keychain warning) → paste cookies → here’s what we found
