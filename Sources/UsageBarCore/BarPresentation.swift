@@ -222,22 +222,22 @@ public struct BarPresentation: Equatable, Sendable {
     }
 
     /// Already-filtered cards (hidden limits removed, order applied).
+    /// Worst, tone, and title come from the cards — not from a second copy of
+    /// the outcomes. Empty outcomes here used to paint "idle" while two
+    /// accounts were locked.
     public static func showing(_ cards: [AccountCard]) -> BarPresentation {
         of(cards: cards, outcomes: [])
     }
 
     private static func of(cards: [AccountCard], outcomes: [UsageOutcome]) -> BarPresentation {
         let segments = cards.map(\.segment)
-        let snapshots = outcomes.compactMap { outcome -> UsageSnapshot? in
-            if case .snapshot(let s) = outcome { return s }
-            return nil
-        }
-        let worst = snapshots
-            .compactMap(\.worstAccountLimit)
+        let worst = cards
+            .flatMap(\.limits)
+            .filter { $0.scope == .account }
             .max(by: Limit.isLessUrgent)
 
         if let worst {
-            let owner = snapshots.first { snap in snap.limits.contains(worst) }?.provider
+            let owner = cards.first { $0.limits.contains(worst) }?.provider
             return BarPresentation(
                 title: percentString(worst.utilization),
                 utilization: worst.utilization,

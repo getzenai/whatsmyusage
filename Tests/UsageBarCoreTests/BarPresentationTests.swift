@@ -383,6 +383,35 @@ struct BarPresentationTests {
         #expect(prefs.applied(to: [a, b]).map(\.trackingID) == ["claude:a"])
     }
 
+    /// `showing` used to pass empty outcomes, so title/tone/worst were idle
+    /// while the cards themselves said two accounts were locked.
+    @Test func showingTakesWorstFromTheCardsRegardlessOfOrder() {
+        let ok = AccountCard(
+            trackingID: "claude:a",
+            provider: .claude,
+            defaultName: "A",
+            limits: [Limit(id: "w", label: "Week", utilization: 0.14, resetsAt: nil, locked: .unknown, scope: .account)],
+            tone: .ok,
+            utilization: 0.14
+        )
+        let locked = AccountCard(
+            trackingID: "chatGPT",
+            provider: .chatGPT,
+            defaultName: "B",
+            limits: [Limit(id: "w", label: "Week", utilization: 1, resetsAt: nil, locked: .locked, scope: .account)],
+            tone: .critical,
+            utilization: 1
+        )
+        for cards in [[ok, locked], [locked, ok]] {
+            let bar = BarPresentation.showing(cards)
+            #expect(bar.title == "100%")
+            #expect(bar.tone == .critical)
+            #expect(bar.worst?.locked == .locked)
+            #expect(bar.provider == .chatGPT)
+            #expect(bar.segments.count == 2)
+        }
+    }
+
     @Test func accountOrderControlsPopoverAndPill() {
         let a = AccountCard(
             trackingID: "claude:a",
