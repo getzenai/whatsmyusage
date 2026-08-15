@@ -55,9 +55,10 @@ Signed Root**, Certificate Type **Code Signing**. The first open still needs
 right-click → Open (self-signed, Gatekeeper). After that the Keychain asks
 once, then stays quiet across rebuilds.
 
-The bundle id is `com.whatsmyusage.app`. A rebuild after the rename asks for
-Keychain access once more (new item name), then copies the old
-`de.getzenai.ai-usage-bar` cookies across.
+The bundle id is `com.whatsmyusage.app`. The Keychain item — the name macOS
+shows in the access prompt — is `whatsmyusage.com`. A rebuild after a rename
+asks once more, then copies cookies from the previous names
+(`com.whatsmyusage.app`, `de.getzenai.ai-usage-bar`).
 
 The app is a menu bar accessory (no Dock icon). UI is English. First launch is a
 short wizard: welcome (Keychain warning + preview of the macOS prompt) → paste

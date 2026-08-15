@@ -17,7 +17,7 @@ enum DefaultsMigration {
         let defaults = UserDefaults.standard
         guard !defaults.bool(forKey: flag) else { return }
         defer { defaults.set(true, forKey: flag) }
-        guard let old = UserDefaults(suiteName: AppIdentity.legacyKeychainService) else { return }
+        guard let old = UserDefaults(suiteName: AppIdentity.legacyDefaultsSuite) else { return }
         for key in keys {
             guard defaults.object(forKey: key) == nil, let value = old.object(forKey: key) else { continue }
             defaults.set(value, forKey: key)

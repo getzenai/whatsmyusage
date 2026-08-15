@@ -361,6 +361,10 @@ struct OnboardingRoot: View {
                 .font(.system(size: 13))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+            Text("The picture below is only a preview so you recognise that prompt. It is not a real window and nothing here asks for your password.")
+                .font(.system(size: 13))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             KeychainPromptPreview()
             Spacer(minLength: 0)
         }
@@ -450,7 +454,7 @@ struct OnboardingRoot: View {
                 .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
             Link(destination: URL(string: AppIdentity.website)!) {
-                Text("whatsmyusage.com")
+                Text(AppIdentity.websiteHost)
                     .font(.system(size: 13, weight: .medium))
             }
             Link(destination: URL(string: "https://github.com/sponsors/getzenai")!) {
@@ -643,49 +647,65 @@ private struct DetectedCard: View {
     }
 }
 
-/// The sheet Fabian captured: lock, password field, access-key wording.
+/// Sketch of the macOS Keychain sheet — must not look like a live window.
 /// The older “confidential information stored in credentials” prompt is a
-/// different sheet — this is the one people actually see.
+/// different sheet. This is the access-key wording people actually see.
 private struct KeychainPromptPreview: View {
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 12) {
-                lockBadge
-                VStack(alignment: .leading, spacing: 5) {
-                    Text("\(AppIdentity.displayName) wants to access key “\(AppIdentity.keychainService)” in your keychain.")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(.primary)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Text("To allow this, enter the “login” keychain password.")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .strokeBorder(Color.accentColor, lineWidth: 3)
-                .frame(height: 24)
-                .overlay(alignment: .leading) {
-                    Rectangle()
-                        .fill(Color.primary)
-                        .frame(width: 1, height: 14)
-                        .padding(.leading, 7)
-                }
+        VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                Image(systemName: "questionmark.circle")
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(.secondary)
-                Spacer()
-                previewButton("Always Allow")
-                previewButton("Deny")
-                previewButton("Allow")
+                Image(systemName: "eye")
+                    .font(.system(size: 11, weight: .semibold))
+                Text("Preview only — not a real window")
+                    .font(.system(size: 11, weight: .semibold))
+                Spacer(minLength: 0)
             }
+            .foregroundStyle(.secondary)
+            .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .top, spacing: 12) {
+                    lockBadge
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text("\(AppIdentity.displayName) wants to access key “\(AppIdentity.keychainService)” in your keychain.")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(.primary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text("To allow this, enter the “login” keychain password.")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .strokeBorder(Color.primary.opacity(0.22), style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                    .frame(height: 24)
+                    .overlay {
+                        Text("password field")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.tertiary)
+                    }
+                HStack(spacing: 8) {
+                    Image(systemName: "questionmark.circle")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundStyle(.tertiary)
+                    Spacer()
+                    previewButton("Always Allow")
+                    previewButton("Deny")
+                    previewButton("Allow")
+                }
+            }
+            .padding(16)
+            .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(Color.primary.opacity(0.22), style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
+            )
+            .allowsHitTesting(false)
         }
-        .padding(16)
-        .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(
+            "Preview of the Keychain prompt. Not a real window. \(AppIdentity.displayName) will ask to access key \(AppIdentity.keychainService)."
         )
     }
 
