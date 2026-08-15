@@ -63,7 +63,7 @@ final class SettingsController: NSObject, NSWindowDelegate {
         let root = OnboardingRoot(model: model, actions: actions())
         let hosting = NSHostingController(rootView: root)
         let window = NSWindow(contentViewController: hosting)
-        window.title = "AI Usage Bar"
+        window.title = AppIdentity.displayName
         window.styleMask = [.titled, .closable, .resizable]
         window.setContentSize(NSSize(width: 640, height: 620))
         window.delegate = self
@@ -350,7 +350,7 @@ struct OnboardingRoot: View {
 
     private var welcome: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Welcome to AI Usage Bar")
+            Text("Welcome to \(AppIdentity.displayName)")
                 .font(.system(size: 22, weight: .semibold))
                 .foregroundStyle(.primary)
             Text("At a glance you can see how much longer your agents can keep working — Claude, ChatGPT, and Grok, including every organisation behind the same login.")
@@ -449,13 +449,13 @@ struct OnboardingRoot: View {
                 .font(.system(size: 14))
                 .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
+            Link(destination: URL(string: AppIdentity.website)!) {
+                Text("whatsmyusage.com")
+                    .font(.system(size: 13, weight: .medium))
+            }
             Link(destination: URL(string: "https://github.com/sponsors/getzenai")!) {
                 Label("Support the developers on GitHub Sponsors", systemImage: "heart.fill")
                     .font(.system(size: 13, weight: .medium))
-            }
-            Link(destination: URL(string: "https://github.com/getzenai/ai_usage_bar")!) {
-                Text("github.com/getzenai/ai_usage_bar")
-                    .font(.system(size: 12))
             }
             Spacer()
         }
@@ -643,48 +643,81 @@ private struct DetectedCard: View {
     }
 }
 
-/// Visual stand-in for the macOS Keychain sheet. People skip the paragraph;
-/// they recognise the buttons.
+/// The sheet Fabian captured: lock, password field, access-key wording.
+/// The older “confidential information stored in credentials” prompt is a
+/// different sheet — this is the one people actually see.
 private struct KeychainPromptPreview: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .top, spacing: 12) {
-                Image(systemName: "key.fill")
-                    .font(.system(size: 28))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 36, height: 36)
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("AI Usage Bar wants to use your confidential information stored in “credentials” in your keychain.")
-                        .font(.system(size: 13))
+                lockBadge
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("\(AppIdentity.displayName) wants to access key “\(AppIdentity.keychainService)” in your keychain.")
+                        .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(.primary)
                         .fixedSize(horizontal: false, vertical: true)
-                    Text("That is where session keys are stored and read. Always Allow is fine.")
-                        .font(.system(size: 11))
+                    Text("To allow this, enter the “login” keychain password.")
+                        .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            HStack {
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .strokeBorder(Color.accentColor, lineWidth: 3)
+                .frame(height: 24)
+                .overlay(alignment: .leading) {
+                    Rectangle()
+                        .fill(Color.primary)
+                        .frame(width: 1, height: 14)
+                        .padding(.leading, 7)
+                }
+            HStack(spacing: 8) {
+                Image(systemName: "questionmark.circle")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(.secondary)
                 Spacer()
                 previewButton("Always Allow")
                 previewButton("Deny")
                 previewButton("Allow")
             }
         }
-        .padding(14)
-        .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 10))
+        .padding(16)
+        .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 10)
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
         )
+    }
+
+    private var lockBadge: some View {
+        ZStack(alignment: .bottomTrailing) {
+            Image(systemName: "lock.fill")
+                .font(.system(size: 28, weight: .medium))
+                .foregroundStyle(Color(red: 0.95, green: 0.72, blue: 0.18))
+                .frame(width: 40, height: 40)
+            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                .fill(Color(nsColor: .controlBackgroundColor))
+                .frame(width: 16, height: 16)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .strokeBorder(Color.primary.opacity(0.2), lineWidth: 0.5)
+                )
+                .overlay(
+                    Image(systemName: "chart.bar.doc.horizontal")
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                )
+                .offset(x: 2, y: 2)
+        }
+        .frame(width: 44, height: 44)
     }
 
     private func previewButton(_ title: String) -> some View {
         Text(title)
             .font(.system(size: 12, weight: .medium))
-            .padding(.horizontal, 10)
+            .padding(.horizontal, 11)
             .padding(.vertical, 5)
-            .background(Color.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+            .background(Color.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
     }
 }
 

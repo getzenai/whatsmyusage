@@ -1,7 +1,6 @@
-# ai_usage_bar
+# WhatsMyUsage
 
-macOS-Menüleisten-App: der **wirklich bindende** Verbrauch aller AI-Abos auf einen Blick —
-Claude, ChatGPT, Grok.
+macOS-Menüleisten-App unter [whatsmyusage.com](https://whatsmyusage.com): der **wirklich bindende** Verbrauch aller AI-Abos auf einen Blick — Claude, ChatGPT, Grok.
 
 ## Warum
 
@@ -38,8 +37,8 @@ wieder zusammensetzen, sonst ist das Token still ungültig.
 
 ```
 swift test
-Scripts/make-app-bundle.sh        # → .build/AI Usage Bar.app
-open ".build/AI Usage Bar.app"
+Scripts/make-app-bundle.sh        # → .build/WhatsMyUsage.app
+open ".build/WhatsMyUsage.app"
 ```
 
 Without `USAGE_BAR_SIGN_IDENTITY` the bundle is ad-hoc signed. That identity
@@ -47,7 +46,7 @@ is the binary hash, so Keychain treats every rebuild as a new app and prompts
 again. A named certificate stays put:
 
 ```
-USAGE_BAR_SIGN_IDENTITY="AI Usage Bar Local" Scripts/make-app-bundle.sh
+USAGE_BAR_SIGN_IDENTITY="WhatsMyUsage Local" Scripts/make-app-bundle.sh
 ```
 
 Make one in two minutes: Keychain Access → Certificate Assistant → Create a
@@ -55,6 +54,10 @@ Certificate… → name it (this is the identity string), Identity Type **Self
 Signed Root**, Certificate Type **Code Signing**. The first open still needs
 right-click → Open (self-signed, Gatekeeper). After that the Keychain asks
 once, then stays quiet across rebuilds.
+
+The bundle id is `com.whatsmyusage.app`. A rebuild after the rename asks for
+Keychain access once more (new item name), then copies the old
+`de.getzenai.ai-usage-bar` cookies across.
 
 The app is a menu bar accessory (no Dock icon). UI is English. First launch is a
 short wizard: welcome (Keychain warning + preview of the macOS prompt) → paste

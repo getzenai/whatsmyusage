@@ -1,5 +1,5 @@
 #!/bin/bash
-# Assembles "AI Usage Bar.app" from the SwiftPM executable.
+# Assembles "WhatsMyUsage.app" from the SwiftPM executable.
 #
 # There is no Xcode project on purpose: SwiftPM produces a bare Mach-O binary,
 # and a menu bar app needs a real .app bundle for LSUIElement (no Dock icon).
@@ -12,8 +12,9 @@
 set -euo pipefail
 
 CONFIGURATION="${1:-release}"
-BUNDLE_ID="de.getzenai.ai-usage-bar"
-APP_NAME="AI Usage Bar"
+# Keep in sync with Sources/UsageBarApp/AppIdentity.swift
+BUNDLE_ID="com.whatsmyusage.app"
+APP_NAME="WhatsMyUsage"
 PRODUCT_NAME="UsageBar"
 VERSION="0.1.0"
 BUILD="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"

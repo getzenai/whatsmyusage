@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var inflight: Task<Void, Never>?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        DefaultsMigration.run()
         installEditMenu()
         let controller = StatusItemController()
         controller.onRefresh = { [weak self] in self?.refresh() }
@@ -47,7 +48,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         main.addItem(appItem)
         let appMenu = NSMenu()
         appMenu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
-        appMenu.addItem(withTitle: "Quit AI Usage Bar", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appMenu.addItem(withTitle: "Quit \(AppIdentity.displayName)", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appItem.submenu = appMenu
 
         let editItem = NSMenuItem()

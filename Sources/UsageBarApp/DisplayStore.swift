@@ -1,6 +1,30 @@
 import Foundation
 import UsageBarCore
 
+/// Copy names, order, and the welcome flag out of the old bundle's defaults
+/// after the rename. Cookies move separately in `KeychainStore`.
+enum DefaultsMigration {
+    private static let flag = "didMigrateWhatsMyUsageDefaults"
+    private static let keys = [
+        "didFinishWelcome",
+        "hiddenLimitKeys",
+        "hiddenAccountIDs",
+        "accountOrder",
+        "accountDisplayNames",
+    ]
+
+    static func run() {
+        let defaults = UserDefaults.standard
+        guard !defaults.bool(forKey: flag) else { return }
+        defer { defaults.set(true, forKey: flag) }
+        guard let old = UserDefaults(suiteName: AppIdentity.legacyKeychainService) else { return }
+        for key in keys {
+            guard defaults.object(forKey: key) == nil, let value = old.object(forKey: key) else { continue }
+            defaults.set(value, forKey: key)
+        }
+    }
+}
+
 enum OnboardingState {
     private static let welcomeKey = "didFinishWelcome"
 
