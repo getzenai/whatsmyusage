@@ -147,7 +147,14 @@ final class SettingsController: NSObject, NSWindowDelegate {
             status.stringValue = "Clipboard is empty."
             return
         }
-        editor.string = text
+        // Append: "Repeat for each provider" would otherwise wipe the first paste.
+        if editor.string.isEmpty {
+            editor.string = text
+        } else if editor.string.hasSuffix("\n") {
+            editor.string += text
+        } else {
+            editor.string += "\n" + text
+        }
         editor.scrollToEndOfDocument(nil)
         window?.makeFirstResponder(editor)
     }
