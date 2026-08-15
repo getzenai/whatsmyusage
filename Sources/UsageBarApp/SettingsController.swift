@@ -34,11 +34,25 @@ final class SettingsController: NSObject, NSWindowDelegate {
     private var hosting: NSHostingController<OnboardingRoot>?
     private var model = OnboardingModel()
     var onSaved: (() -> Void)?
+    var onPreferencesChanged: (() -> Void)?
 
-    func show() {
+    func show(startingAt step: OnboardingStep? = nil) {
         NSApp.setActivationPolicy(.regular)
-        model.step = KeychainStore.load().isEmpty ? .welcome : .paste
-        model.refreshKeychainSummary()
+        model.prefs = DisplayStore.load()
+        if let step {
+            model.step = step
+        } else if !OnboardingState.didFinishWelcome {
+            model.step = .welcome
+        } else if !KeychainStore.load().isEmpty {
+            model.step = .detected
+            model.refreshKeychainSummary()
+        } else {
+            model.step = .paste
+            model.refreshKeychainSummary()
+        }
+        if model.step != .welcome {
+            model.refreshKeychainSummary()
+        }
         if let window {
             syncRoot()
             window.makeKeyAndOrderFront(nil)
@@ -63,6 +77,7 @@ final class SettingsController: NSObject, NSWindowDelegate {
 
     func didRefresh(byProvider: [Provider: [UsageOutcome]]) {
         model.cards = BarPresentation.cards(byProvider: byProvider)
+        model.prefs = DisplayStore.load()
         if model.advanceAfterRefresh {
             model.advanceAfterRefresh = false
             model.step = model.cards.isEmpty ? .paste : .detected
@@ -82,8 +97,41 @@ final class SettingsController: NSObject, NSWindowDelegate {
             pasteFromClipboard: { [weak self] in self?.pasteFromClipboard() },
             save: { [weak self] in self?.save() },
             clear: { [weak self] in self?.clearAll() },
-            close: { [weak self] in self?.window?.performClose(nil) }
+            close: { [weak self] in self?.window?.performClose(nil) },
+            toggleLimit: { [weak self] trackingID, limitID in
+                self?.mutatePrefs { $0.toggleLimit(trackingID: trackingID, limitID: limitID) }
+            },
+            toggleAccount: { [weak self] trackingID in
+                self?.mutatePrefs { $0.toggleAccount(trackingID) }
+            },
+            moveAccount: { [weak self] trackingID, delta in
+                self?.mutatePrefs { $0.move(trackingID: trackingID, by: delta, among: self?.model.cards ?? []) }
+            },
+            rename: { [weak self] trackingID, name in
+                AccountNames.setName(name, for: trackingID)
+                self?.syncRoot()
+                self?.onPreferencesChanged?()
+            },
+            welcomeContinued: { [weak self] in
+                OnboardingState.didFinishWelcome = true
+                self?.model.refreshKeychainSummary()
+                if !KeychainStore.load().isEmpty {
+                    self?.onSaved?()
+                    self?.model.step = .detected
+                    self?.syncRoot()
+                    return
+                }
+                self?.model.step = .paste
+                self?.syncRoot()
+            }
         )
+    }
+
+    private func mutatePrefs(_ body: (inout DisplayPreferences) -> Void) {
+        body(&model.prefs)
+        DisplayStore.save(model.prefs)
+        syncRoot()
+        onPreferencesChanged?()
     }
 
     private func syncRoot() {
@@ -126,7 +174,7 @@ final class SettingsController: NSObject, NSWindowDelegate {
     }
 
     private func clearAll() {
-        KeychainStore.replace(ExtractedCredentials())
+        KeychainStore.replace(CredentialStore())
         model.success = nil
         model.status = "Keychain cleared."
         model.cards = []
@@ -137,12 +185,15 @@ final class SettingsController: NSObject, NSWindowDelegate {
 
     private func summary(of creds: ExtractedCredentials) -> String {
         var bits: [String] = []
-        if creds.claude != nil { bits.append("Claude") }
-        if let gpt = creds.chatGPT {
-            let n = gpt.parts.isEmpty ? 1 : gpt.parts.count
-            bits.append("ChatGPT (\(n) part\(n == 1 ? "" : "s"))")
+        if !creds.claudeAccounts.isEmpty {
+            bits.append(creds.claudeAccounts.count == 1 ? "Claude" : "Claude ×\(creds.claudeAccounts.count)")
         }
-        if creds.grok != nil { bits.append("Grok") }
+        if !creds.chatGPTAccounts.isEmpty {
+            bits.append(creds.chatGPTAccounts.count == 1 ? "ChatGPT" : "ChatGPT ×\(creds.chatGPTAccounts.count)")
+        }
+        if !creds.grokAccounts.isEmpty {
+            bits.append(creds.grokAccounts.count == 1 ? "Grok" : "Grok ×\(creds.grokAccounts.count)")
+        }
         return bits.isEmpty ? "nothing" : bits.joined(separator: ", ")
     }
 }
@@ -157,17 +208,21 @@ final class OnboardingModel {
     var keychainSummary: String = "No account in the Keychain yet."
     var cards: [AccountCard] = []
     var advanceAfterRefresh = false
+    var prefs = DisplayPreferences()
 
     func refreshKeychainSummary() {
-        let creds = KeychainStore.load()
-        if creds.isEmpty {
+        let store = KeychainStore.load()
+        if store.isEmpty {
             keychainSummary = "No account in the Keychain yet."
             return
         }
         var bits: [String] = []
-        if creds.claude != nil { bits.append("Claude") }
-        if creds.chatGPT != nil { bits.append("ChatGPT") }
-        if creds.grok != nil { bits.append("Grok") }
+        let claude = store.accounts.filter { $0.claude != nil }.count
+        let chatGPT = store.accounts.filter { $0.chatGPT != nil }.count
+        let grok = store.accounts.filter { $0.grok != nil }.count
+        if claude > 0 { bits.append(claude == 1 ? "Claude" : "Claude ×\(claude)") }
+        if chatGPT > 0 { bits.append(chatGPT == 1 ? "ChatGPT" : "ChatGPT ×\(chatGPT)") }
+        if grok > 0 { bits.append(grok == 1 ? "Grok" : "Grok ×\(grok)") }
         keychainSummary = bits.joined(separator: ", ") + " in the Keychain."
     }
 }
@@ -177,6 +232,11 @@ struct OnboardingActions {
     var save: () -> Void
     var clear: () -> Void
     var close: () -> Void
+    var toggleLimit: (String, String) -> Void
+    var toggleAccount: (String) -> Void
+    var moveAccount: (String, Int) -> Void
+    var rename: (String, String) -> Void
+    var welcomeContinued: () -> Void
 }
 
 struct OnboardingRoot: View {
@@ -236,6 +296,10 @@ struct OnboardingRoot: View {
                 .font(.system(size: 13))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+            Text("On the next step the app will ask macOS for Keychain access, so it can store those keys. Nothing is written until you paste and save.")
+                .font(.system(size: 13))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             Spacer()
         }
     }
@@ -249,6 +313,10 @@ struct OnboardingRoot: View {
                 .font(.system(size: 12))
                 .foregroundStyle(.primary)
                 .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("Only the session keys are saved to the Keychain (Claude sessionKey, ChatGPT session-token, Grok sso). Everything else in the paste is stripped and discarded.")
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             CookieEditor(text: $model.pasteText)
                 .frame(maxWidth: .infinity, minHeight: 160, maxHeight: .infinity)
@@ -273,7 +341,7 @@ struct OnboardingRoot: View {
             Text("Here’s what we found")
                 .font(.system(size: 20, weight: .semibold))
                 .foregroundStyle(.primary)
-            Text("One card per account. Click a name to rename it — useful when two Claude organisations would otherwise look the same.")
+            Text("One card per account. Click a name to rename it. The eye hides a row from the popover and the pill; the arrows set the order of both.")
                 .font(.system(size: 13))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -289,8 +357,14 @@ struct OnboardingRoot: View {
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
-                        ForEach(model.cards) { card in
-                            DetectedCard(card: card)
+                        ForEach(Array(model.prefs.ordered(model.cards).enumerated()), id: \.element.id) { index, card in
+                            DetectedCard(
+                                card: card,
+                                prefs: model.prefs,
+                                canMoveUp: index > 0,
+                                canMoveDown: index + 1 < model.cards.count,
+                                actions: actions
+                            )
                             Divider().opacity(0.3)
                         }
                     }
@@ -329,6 +403,9 @@ struct OnboardingRoot: View {
                 Button("Save to Keychain", action: actions.save)
                     .keyboardShortcut(.defaultAction)
                 Button("Clear Keychain", action: actions.clear)
+            } else if model.step == .detected {
+                Button("Add cookies") { model.step = .paste }
+                Button("Clear Keychain", action: actions.clear)
             }
             Spacer()
             if model.step != .welcome {
@@ -349,6 +426,10 @@ struct OnboardingRoot: View {
     }
 
     private func go(_ delta: Int) {
+        if model.step == .welcome, delta == 1 {
+            actions.welcomeContinued()
+            return
+        }
         let next = model.step.rawValue + delta
         guard let step = OnboardingStep(rawValue: next) else { return }
         model.step = step
@@ -358,7 +439,7 @@ struct OnboardingRoot: View {
         switch step {
         case .welcome: "Welcome"
         case .paste: "Paste cookies"
-        case .detected: "Detected"
+        case .detected: "Settings"
         case .done: "Done"
         }
     }
@@ -382,6 +463,10 @@ struct OnboardingRoot: View {
 
 private struct DetectedCard: View {
     let card: AccountCard
+    let prefs: DisplayPreferences
+    var canMoveUp: Bool
+    var canMoveDown: Bool
+    let actions: OnboardingActions
     @State private var draft: String = ""
     @State private var editing = false
     @FocusState private var nameFocused: Bool
@@ -390,9 +475,27 @@ private struct DetectedCard: View {
         AccountNames.name(for: card.trackingID, default: card.defaultName)
     }
 
+    private var accountVisible: Bool {
+        prefs.isAccountVisible(card.trackingID)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack {
+            HStack(spacing: 6) {
+                VStack(spacing: 0) {
+                    Button { actions.moveAccount(card.trackingID, -1) } label: {
+                        Image(systemName: "chevron.up")
+                    }
+                    .disabled(!canMoveUp)
+                    Button { actions.moveAccount(card.trackingID, 1) } label: {
+                        Image(systemName: "chevron.down")
+                    }
+                    .disabled(!canMoveDown)
+                }
+                .buttonStyle(.borderless)
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(.secondary)
+
                 if editing {
                     TextField("Name", text: $draft)
                         .textFieldStyle(.roundedBorder)
@@ -406,7 +509,7 @@ private struct DetectedCard: View {
                 } else {
                     Text(displayName)
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(accountVisible ? Color.primary : Color.secondary)
                         .onTapGesture {
                             draft = displayName
                             editing = true
@@ -421,27 +524,53 @@ private struct DetectedCard: View {
                         .font(.system(size: 12, weight: .medium).monospacedDigit())
                         .foregroundStyle(.primary)
                 }
+                eyeButton(
+                    visible: accountVisible,
+                    help: accountVisible ? "Hide this account from the bar" : "Show this account in the bar"
+                ) {
+                    actions.toggleAccount(card.trackingID)
+                }
             }
-            ForEach(card.limits.prefix(4)) { limit in
+            ForEach(card.limits) { limit in
+                let visible = prefs.isLimitVisible(trackingID: card.trackingID, limitID: limit.id)
                 HStack {
                     Text(limit.label)
                         .font(.system(size: 12))
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(visible ? Color.primary : Color.secondary)
                     Spacer()
                     Text(BarPresentation.percentString(limit.utilization))
                         .font(.system(size: 12).monospacedDigit())
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(visible ? Color.primary : Color.secondary)
+                    eyeButton(
+                        visible: visible,
+                        help: visible ? "Hide this limit" : "Show this limit"
+                    ) {
+                        actions.toggleLimit(card.trackingID, limit.id)
+                    }
                 }
+                .opacity(visible ? 1 : 0.45)
             }
         }
         .padding(12)
+        .opacity(accountVisible ? 1 : 0.55)
+    }
+
+    private func eyeButton(visible: Bool, help: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: visible ? "eye" : "eye.slash")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(visible ? Color.secondary : Color.primary)
+                .frame(width: 18, height: 18)
+        }
+        .buttonStyle(.borderless)
+        .help(help)
     }
 
     private func commit() {
         guard editing else { return }
         editing = false
         nameFocused = false
-        AccountNames.setName(draft, for: card.trackingID)
+        actions.rename(card.trackingID, draft)
     }
 }
 

@@ -12,28 +12,46 @@ struct UsageClient {
         self.session = session
     }
 
-    func refresh(using creds: ExtractedCredentials) async -> [Provider: [UsageOutcome]] {
-        await withTaskGroup(of: (Provider, [UsageOutcome]).self) { group in
-            if let claude = creds.claude {
-                group.addTask { (.claude, await self.fetchClaude(claude)) }
+    func refresh(using store: CredentialStore) async -> RefreshResult {
+        await withTaskGroup(of: AccountFetch.self) { group in
+            for account in store.accounts {
+                if let claude = account.claude {
+                    group.addTask { await self.fetchClaude(claude, accountID: account.id) }
+                }
+                if let gpt = account.chatGPT {
+                    group.addTask { await self.fetchChatGPT(gpt, accountID: account.id) }
+                }
+                if let grok = account.grok {
+                    group.addTask { await self.fetchGrok(grok, accountID: account.id) }
+                }
             }
-            if let gpt = creds.chatGPT {
-                group.addTask { (.chatGPT, [await self.fetchChatGPT(gpt)]) }
+            var byProvider: [Provider: [UsageOutcome]] = [:]
+            var orgIDs: [String: Set<String>] = [:]
+            for await fetch in group {
+                byProvider[fetch.provider, default: []].append(contentsOf: fetch.outcomes)
+                if let ids = fetch.claudeOrgIDs {
+                    orgIDs[fetch.accountID] = ids
+                }
             }
-            if let grok = creds.grok {
-                group.addTask { (.grok, await self.fetchGrok(grok)) }
-            }
-            var result: [Provider: [UsageOutcome]] = [:]
-            for await (provider, outcomes) in group {
-                result[provider] = outcomes
-            }
-            return result
+            return RefreshResult(byProvider: byProvider, claudeOrgIDsByAccountID: orgIDs)
         }
+    }
+
+    struct RefreshResult: Sendable {
+        var byProvider: [Provider: [UsageOutcome]]
+        var claudeOrgIDsByAccountID: [String: Set<String>]
+    }
+
+    private struct AccountFetch: Sendable {
+        var provider: Provider
+        var accountID: String
+        var outcomes: [UsageOutcome]
+        var claudeOrgIDs: Set<String>?
     }
 
     // MARK: - Claude
 
-    private func fetchClaude(_ creds: ClaudeCredentials) async -> [UsageOutcome] {
+    private func fetchClaude(_ creds: ClaudeCredentials, accountID: String) async -> AccountFetch {
         let bootstrap = await get(
             url: URL(string: "https://claude.ai/api/bootstrap")!,
             cookie: creds.cookieHeader
@@ -44,16 +62,28 @@ struct UsageClient {
             body: bootstrap.body,
             endpoint: .bootstrap
         )
-        if case .expired = bootstrapOutcome { return [.expired] }
-        if case .notJSON = bootstrapOutcome { return [.notJSON] }
-        if bootstrap.status != 200 { return [bootstrapOutcome] }
+        if case .expired = bootstrapOutcome {
+            return AccountFetch(provider: .claude, accountID: accountID, outcomes: [.expired], claudeOrgIDs: nil)
+        }
+        if case .notJSON = bootstrapOutcome {
+            return AccountFetch(provider: .claude, accountID: accountID, outcomes: [.notJSON], claudeOrgIDs: nil)
+        }
+        if bootstrap.status != 200 {
+            return AccountFetch(provider: .claude, accountID: accountID, outcomes: [bootstrapOutcome], claudeOrgIDs: nil)
+        }
 
         let orgs = UsageParser.claudeOrganizations(from: bootstrap.body)
         let trackable = orgs.filter(\.isChatCapable)
         if trackable.isEmpty {
             // Cookie works, but no chat org. Surface the API-console 403s rather
             // than pretending there is nothing.
-            return orgs.isEmpty ? [.empty] : [.notTrackable(message: "no chat organization")]
+            let outcome: UsageOutcome = orgs.isEmpty ? .empty : .notTrackable(message: "no chat organization")
+            return AccountFetch(
+                provider: .claude,
+                accountID: accountID,
+                outcomes: [outcome],
+                claudeOrgIDs: Set(orgs.map(\.id))
+            )
         }
 
         var outcomes: [UsageOutcome] = []
@@ -88,36 +118,55 @@ struct UsageClient {
                 )))
             }
         }
-        return outcomes
+        return AccountFetch(
+            provider: .claude,
+            accountID: accountID,
+            outcomes: outcomes,
+            claudeOrgIDs: Set(trackable.map(\.id))
+        )
     }
 
     // MARK: - ChatGPT
 
-    private func fetchChatGPT(_ creds: ChatGPTCredentials) async -> UsageOutcome {
+    private func fetchChatGPT(_ creds: ChatGPTCredentials, accountID: String) async -> AccountFetch {
+        let trackingID = "chatgpt:\(accountID)"
         let session = await get(
             url: URL(string: "https://chatgpt.com/api/auth/session")!,
             cookie: creds.cookieHeader
         )
+        let outcome: UsageOutcome
         switch UsageParser.chatGPTAccessToken(statusCode: session.status, body: session.body) {
-        case .failed(let outcome):
-            return outcome
+        case .failed(let failed):
+            outcome = failed
         case .bearer(let token):
             let response = await get(
                 url: URL(string: "https://chatgpt.com/backend-api/wham/usage")!,
                 cookie: creds.cookieHeader,
                 authorization: "Bearer \(token)"
             )
-            return UsageParser.parseUsage(
+            outcome = UsageParser.parseUsage(
                 provider: .chatGPT,
                 statusCode: response.status,
                 body: response.body
             )
         }
+        return AccountFetch(
+            provider: .chatGPT,
+            accountID: accountID,
+            outcomes: [retag(outcome, trackingID: trackingID)],
+            claudeOrgIDs: nil
+        )
     }
 
     // MARK: - Grok
 
-    private func fetchGrok(_ creds: GrokCredentials) async -> [UsageOutcome] {
+    private func fetchGrok(_ creds: GrokCredentials, accountID: String) async -> AccountFetch {
+        let trackingID = "grok:\(accountID)"
+        let outcomes = await fetchGrokOutcomes(creds, trackingID: trackingID)
+        return AccountFetch(provider: .grok, accountID: accountID, outcomes: outcomes, claudeOrgIDs: nil)
+    }
+
+    private func fetchGrokOutcomes(_ creds: GrokCredentials, trackingID: String) async -> [UsageOutcome] {
         var limits: [Limit] = []
         var errors: [UsageOutcome] = []
         for model in grokModels {
@@ -152,12 +201,23 @@ struct UsageClient {
         if !limits.isEmpty {
             outcomes.append(.snapshot(UsageSnapshot(
                 provider: .grok,
-                trackingID: "grok",
+                trackingID: trackingID,
                 limits: limits
             )))
         }
-        outcomes.append(contentsOf: errors)
+        outcomes.append(contentsOf: errors.map { retag($0, trackingID: trackingID) })
         return outcomes
+    }
+
+    private func retag(_ outcome: UsageOutcome, trackingID: String) -> UsageOutcome {
+        guard case .snapshot(let snap) = outcome else { return outcome }
+        return .snapshot(UsageSnapshot(
+            provider: snap.provider,
+            trackingID: trackingID,
+            accountLabel: snap.accountLabel,
+            limits: snap.limits,
+            diagnostic: snap.diagnostic
+        ))
     }
 
     // MARK: - Transport

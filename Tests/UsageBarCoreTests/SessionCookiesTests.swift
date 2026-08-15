@@ -123,4 +123,31 @@ struct SessionCookiesTests {
         #expect(creds.grok?.sso == Fixtures.sampleGrokSSO)
         #expect(creds.configuredProviders == [.claude, .chatGPT, .grok])
     }
+
+    @Test func chatGPTKeepsTheAccountCookie() throws {
+        let gpt = try #require(try SessionCookies.extractSessionKey(from: Fixtures.safariChatGPTTable).chatGPT)
+        #expect(gpt.accountID == Fixtures.sampleChatGPTAccountID)
+    }
+
+    @Test func twoClaudeKeysInOnePasteAreTwoAccounts() throws {
+        let pasted = Fixtures.safariClaudeTable + """
+
+        lastActiveOrg\t00000000-0000-4000-8000-000000000099\t.claude.ai\t/
+        sessionKey\t\(Fixtures.sampleClaudeKeyB)\t.claude.ai\t/
+        """
+        let creds = try SessionCookies.extractSessionKey(from: pasted)
+        #expect(creds.claudeAccounts.count == 2)
+        #expect(creds.claudeAccounts.map(\.sessionKey) == [Fixtures.sampleClaudeKey, Fixtures.sampleClaudeKeyB])
+        #expect(creds.claudeAccounts[0].lastActiveOrg == "00000000-0000-4000-8000-000000000002")
+        #expect(creds.claudeAccounts[1].lastActiveOrg == "00000000-0000-4000-8000-000000000099")
+    }
+
+    @Test func twoGrokSSOsAreTwoAccounts() throws {
+        let pasted = """
+        sso\t\(Fixtures.sampleGrokSSO)\t.grok.com\t/
+        sso\tsso-placeholder-value-yyyyyyyy\t.grok.com\t/
+        """
+        let creds = try SessionCookies.extractSessionKey(from: pasted)
+        #expect(creds.grokAccounts.map(\.sso) == [Fixtures.sampleGrokSSO, "sso-placeholder-value-yyyyyyyy"])
+    }
 }

@@ -20,6 +20,8 @@ public struct ChatGPTCredentials: Equatable, Sendable {
     /// unchunked `session-token`.
     public let parts: [CookiePart]
     public let assembled: String
+    /// `_account` cookie. Stable across a token refresh of the same login.
+    public let accountID: String?
 
     public struct CookiePart: Equatable, Sendable {
         public let index: Int
@@ -30,9 +32,10 @@ public struct ChatGPTCredentials: Equatable, Sendable {
         }
     }
 
-    public init(parts: [CookiePart], assembled: String) {
+    public init(parts: [CookiePart], assembled: String, accountID: String? = nil) {
         self.parts = parts
         self.assembled = assembled
+        self.accountID = accountID
     }
 
     /// Sent the way the browser sends them: numbered cookies, not one assembled value.
@@ -59,23 +62,37 @@ public struct GrokCredentials: Equatable, Sendable {
 }
 
 public struct ExtractedCredentials: Equatable, Sendable {
-    public var claude: ClaudeCredentials?
-    public var chatGPT: ChatGPTCredentials?
-    public var grok: GrokCredentials?
+    public var claudeAccounts: [ClaudeCredentials]
+    public var chatGPTAccounts: [ChatGPTCredentials]
+    public var grokAccounts: [GrokCredentials]
 
-    public init(claude: ClaudeCredentials? = nil, chatGPT: ChatGPTCredentials? = nil, grok: GrokCredentials? = nil) {
-        self.claude = claude
-        self.chatGPT = chatGPT
-        self.grok = grok
+    /// First of each provider — a single paste is usually one login.
+    public var claude: ClaudeCredentials? { claudeAccounts.first }
+    public var chatGPT: ChatGPTCredentials? { chatGPTAccounts.first }
+    public var grok: GrokCredentials? { grokAccounts.first }
+
+    public init(
+        claude: ClaudeCredentials? = nil,
+        chatGPT: ChatGPTCredentials? = nil,
+        grok: GrokCredentials? = nil,
+        claudeAccounts: [ClaudeCredentials]? = nil,
+        chatGPTAccounts: [ChatGPTCredentials]? = nil,
+        grokAccounts: [GrokCredentials]? = nil
+    ) {
+        self.claudeAccounts = claudeAccounts ?? claude.map { [$0] } ?? []
+        self.chatGPTAccounts = chatGPTAccounts ?? chatGPT.map { [$0] } ?? []
+        self.grokAccounts = grokAccounts ?? grok.map { [$0] } ?? []
     }
 
-    public var isEmpty: Bool { claude == nil && chatGPT == nil && grok == nil }
+    public var isEmpty: Bool {
+        claudeAccounts.isEmpty && chatGPTAccounts.isEmpty && grokAccounts.isEmpty
+    }
 
     public var configuredProviders: [Provider] {
         var result: [Provider] = []
-        if claude != nil { result.append(.claude) }
-        if chatGPT != nil { result.append(.chatGPT) }
-        if grok != nil { result.append(.grok) }
+        if !claudeAccounts.isEmpty { result.append(.claude) }
+        if !chatGPTAccounts.isEmpty { result.append(.chatGPT) }
+        if !grokAccounts.isEmpty { result.append(.grok) }
         return result
     }
 }
@@ -97,9 +114,9 @@ public enum SessionCookies {
         let pairs = namedValues(in: pasted)
         var extracted = ExtractedCredentials()
 
-        extracted.claude = extractClaude(from: pairs, pasted: pasted)
-        extracted.chatGPT = extractChatGPT(from: pairs)
-        extracted.grok = extractGrok(from: pairs)
+        extracted.claudeAccounts = extractClaudes(from: pairs, pasted: pasted)
+        extracted.chatGPTAccounts = extractChatGPT(from: pairs).map { [$0] } ?? []
+        extracted.grokAccounts = extractGroks(from: pairs)
 
         if extracted.isEmpty { throw CookieExtractionError.nothingFound }
         return extracted
@@ -107,14 +124,31 @@ public enum SessionCookies {
 
     // MARK: - Claude
 
-    private static func extractClaude(from pairs: [NamedValue], pasted: String) -> ClaudeCredentials? {
-        var sessionKey = pairs.first { claudeKeyNames.contains($0.name) && isClaudeKey($0.value) }?.value
-        if sessionKey == nil {
-            sessionKey = tokens(in: pasted).first(where: isClaudeKey)
+    /// Every distinct `sessionKey` in the paste. Two emails are two keys.
+    /// `lastActiveOrg` is the last org seen *before* that key, so two stacked
+    /// Safari tables keep their pairing.
+    private static func extractClaudes(from pairs: [NamedValue], pasted: String) -> [ClaudeCredentials] {
+        var lastOrg: String?
+        var seen = Set<String>()
+        var result: [ClaudeCredentials] = []
+
+        for pair in pairs {
+            if orgNames.contains(pair.name), UUID(uuidString: pair.value) != nil {
+                lastOrg = pair.value
+                continue
+            }
+            guard claudeKeyNames.contains(pair.name), isClaudeKey(pair.value) else { continue }
+            guard seen.insert(pair.value).inserted else { continue }
+            result.append(ClaudeCredentials(sessionKey: pair.value, lastActiveOrg: lastOrg))
         }
-        guard let sessionKey else { return nil }
-        let org = pairs.first { orgNames.contains($0.name) && UUID(uuidString: $0.value) != nil }?.value
-        return ClaudeCredentials(sessionKey: sessionKey, lastActiveOrg: org)
+
+        if result.isEmpty {
+            for token in tokens(in: pasted) where isClaudeKey(token) {
+                guard seen.insert(token).inserted else { continue }
+                result.append(ClaudeCredentials(sessionKey: token, lastActiveOrg: nil))
+            }
+        }
+        return result
     }
 
     private static func isClaudeKey(_ value: String) -> Bool {
@@ -128,6 +162,9 @@ public enum SessionCookies {
     private static func extractChatGPT(from pairs: [NamedValue]) -> ChatGPTCredentials? {
         var numbered: [ChatGPTCredentials.CookiePart] = []
         var unchunked: String?
+        let accountID = pairs.first {
+            $0.name == "_account" && UUID(uuidString: $0.value) != nil
+        }?.value
 
         for pair in pairs {
             guard let parsed = chatGPTToken(named: pair.name) else { continue }
@@ -144,10 +181,14 @@ public enum SessionCookies {
             var byIndex: [Int: String] = [:]
             for part in numbered { byIndex[part.index] = part.value }
             let parts = byIndex.keys.sorted().map { ChatGPTCredentials.CookiePart(index: $0, value: byIndex[$0]!) }
-            return ChatGPTCredentials(parts: parts, assembled: parts.map(\.value).joined())
+            return ChatGPTCredentials(
+                parts: parts,
+                assembled: parts.map(\.value).joined(),
+                accountID: accountID
+            )
         }
         if let unchunked {
-            return ChatGPTCredentials(parts: [], assembled: unchunked)
+            return ChatGPTCredentials(parts: [], assembled: unchunked, accountID: accountID)
         }
         return nil
     }
@@ -172,20 +213,22 @@ public enum SessionCookies {
 
     // MARK: - Grok
 
-    private static func extractGrok(from pairs: [NamedValue]) -> GrokCredentials? {
-        // Prefer a row whose domain is grok.com. Fall back to the name `sso`
+    private static func extractGroks(from pairs: [NamedValue]) -> [GrokCredentials] {
+        // Prefer rows whose domain is grok.com. Fall back to the name `sso`
         // only when no domain is attached — a Safari table from chatgpt.com
         // should not donate a stray cookie of the same name.
         let candidates = pairs.filter { $0.name == "sso" && $0.value.count >= 8 }
-        if let grok = candidates.first(where: { domain in
-            domain.domain?.localizedCaseInsensitiveContains("grok.com") == true
-        }) {
-            return GrokCredentials(sso: grok.value)
+        let onGrok = candidates.filter {
+            $0.domain?.localizedCaseInsensitiveContains("grok.com") == true
         }
-        if let bare = candidates.first(where: { $0.domain == nil }) {
-            return GrokCredentials(sso: bare.value)
+        let source = onGrok.isEmpty ? candidates.filter { $0.domain == nil } : onGrok
+        var seen = Set<String>()
+        var result: [GrokCredentials] = []
+        for row in source {
+            guard seen.insert(row.value).inserted else { continue }
+            result.append(GrokCredentials(sso: row.value))
         }
-        return nil
+        return result
     }
 
     // MARK: - Split

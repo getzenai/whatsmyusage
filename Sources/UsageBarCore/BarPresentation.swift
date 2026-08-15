@@ -71,6 +71,21 @@ public struct AccountCard: Equatable, Sendable, Identifiable {
             tone: tone
         )
     }
+
+    /// Rebuild tone from the limits that are still visible. A hidden Fable
+    /// week must not keep painting the slot red.
+    public func displaying(limits visible: [Limit]) -> AccountCard {
+        let worst = visible.filter { $0.scope == .account }.max(by: Limit.isLessUrgent)
+        return AccountCard(
+            trackingID: trackingID,
+            provider: provider,
+            defaultName: defaultName,
+            limits: visible,
+            tone: worst.map(BarPresentation.tone(of:)) ?? (message == nil ? .idle : tone),
+            utilization: worst?.utilization,
+            message: message
+        )
+    }
 }
 
 /// Days and hours until reset — the date itself makes the user do the arithmetic.
@@ -154,19 +169,23 @@ public struct BarPresentation: Equatable, Sendable {
             }
 
             if provider == .grok {
-                let limits = snapshots.flatMap(\.limits)
-                if !limits.isEmpty {
-                    let name = snapshots.compactMap(\.accountLabel).first ?? provider.displayName
-                    result.append(liveCard(
-                        trackingID: "grok",
-                        provider: provider,
-                        name: name,
-                        limits: limits
-                    ))
-                }
-                for snap in snapshots {
-                    if let card = diagnosticCard(snap) {
-                        result.append(card)
+                let grouped = Dictionary(grouping: snapshots, by: \.trackingID)
+                for trackingID in grouped.keys.sorted() {
+                    let group = grouped[trackingID] ?? []
+                    let limits = group.flatMap(\.limits)
+                    if !limits.isEmpty {
+                        let name = group.compactMap(\.accountLabel).first ?? provider.displayName
+                        result.append(liveCard(
+                            trackingID: trackingID,
+                            provider: provider,
+                            name: name,
+                            limits: limits
+                        ))
+                    }
+                    for snap in group {
+                        if let card = diagnosticCard(snap) {
+                            result.append(card)
+                        }
                     }
                 }
             } else {
@@ -200,6 +219,11 @@ public struct BarPresentation: Equatable, Sendable {
     public static func of(byProvider: [Provider: [UsageOutcome]]) -> BarPresentation {
         let flat = Provider.allCases.flatMap { byProvider[$0] ?? [] }
         return of(cards: cards(byProvider: byProvider), outcomes: flat)
+    }
+
+    /// Already-filtered cards (hidden limits removed, order applied).
+    public static func showing(_ cards: [AccountCard]) -> BarPresentation {
+        of(cards: cards, outcomes: [])
     }
 
     private static func of(cards: [AccountCard], outcomes: [UsageOutcome]) -> BarPresentation {

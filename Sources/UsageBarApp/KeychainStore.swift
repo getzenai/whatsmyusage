@@ -8,6 +8,8 @@ enum KeychainStore {
     private static let account = "credentials"
 
     private struct Stored: Codable {
+        var accounts: [StoredAccount]?
+        // Pre-multi-account fields. Read on upgrade, never written again.
         var claudeSessionKey: String?
         var claudeLastActiveOrg: String?
         var chatGPTParts: [Part]?
@@ -20,63 +22,133 @@ enum KeychainStore {
         }
     }
 
-    static func load() -> ExtractedCredentials {
-        guard let data = read(),
-              let stored = try? JSONDecoder().decode(Stored.self, from: data)
-        else { return ExtractedCredentials() }
+    private struct StoredAccount: Codable {
+        var id: String
+        var claudeSessionKey: String?
+        var claudeLastActiveOrg: String?
+        var chatGPTParts: [Stored.Part]?
+        var chatGPTAssembled: String?
+        var chatGPTAccountID: String?
+        var grokSSO: String?
+    }
 
-        var creds = ExtractedCredentials()
+    static func load() -> CredentialStore {
+        let loaded = decode(read())
+        if loaded.persist, !loaded.store.isEmpty {
+            write(encode(loaded.store))
+        }
+        return loaded.store
+    }
+
+    static func save(_ incoming: ExtractedCredentials) {
+        let merged = CredentialMerge.applying(incoming, to: load())
+        replace(merged)
+    }
+
+    static func replace(_ store: CredentialStore) {
+        if store.isEmpty {
+            delete()
+            return
+        }
+        write(encode(store))
+    }
+
+    static func recordClaudeOrgs(_ orgIDsByAccountID: [String: Set<String>]) {
+        let collapsed = CredentialMerge.collapsingClaudeDuplicates(load(), orgIDsByAccountID: orgIDsByAccountID)
+        if collapsed != load() {
+            replace(collapsed)
+        }
+    }
+
+    private struct Decoded {
+        var store: CredentialStore
+        var persist: Bool
+    }
+
+    private static func decode(_ data: Data?) -> Decoded {
+        guard let data, let stored = try? JSONDecoder().decode(Stored.self, from: data) else {
+            return Decoded(store: CredentialStore(), persist: false)
+        }
+        if let accounts = stored.accounts {
+            return Decoded(store: CredentialStore(accounts: accounts.compactMap(account(from:))), persist: false)
+        }
+        return Decoded(store: migrateLegacy(stored), persist: true)
+    }
+
+    private static func migrateLegacy(_ stored: Stored) -> CredentialStore {
+        var accounts: [CredentialAccount] = []
         if let key = stored.claudeSessionKey {
-            creds.claude = ClaudeCredentials(sessionKey: key, lastActiveOrg: stored.claudeLastActiveOrg)
+            accounts.append(CredentialAccount(
+                id: UUID().uuidString,
+                claude: ClaudeCredentials(sessionKey: key, lastActiveOrg: stored.claudeLastActiveOrg)
+            ))
         }
         if let parts = stored.chatGPTParts, !parts.isEmpty {
             let cookieParts = parts.map { ChatGPTCredentials.CookiePart(index: $0.index, value: $0.value) }
-            creds.chatGPT = ChatGPTCredentials(parts: cookieParts, assembled: cookieParts.map(\.value).joined())
+            accounts.append(CredentialAccount(
+                id: UUID().uuidString,
+                chatGPT: ChatGPTCredentials(parts: cookieParts, assembled: cookieParts.map(\.value).joined())
+            ))
         } else if let assembled = stored.chatGPTAssembled {
-            creds.chatGPT = ChatGPTCredentials(parts: [], assembled: assembled)
+            accounts.append(CredentialAccount(
+                id: UUID().uuidString,
+                chatGPT: ChatGPTCredentials(parts: [], assembled: assembled)
+            ))
         }
         if let sso = stored.grokSSO {
-            creds.grok = GrokCredentials(sso: sso)
+            accounts.append(CredentialAccount(id: UUID().uuidString, grok: GrokCredentials(sso: sso)))
         }
-        return creds
-    }
-
-    static func save(_ creds: ExtractedCredentials) {
-        let existing = load()
-        let merged = ExtractedCredentials(
-            claude: creds.claude ?? existing.claude,
-            chatGPT: creds.chatGPT ?? existing.chatGPT,
-            grok: creds.grok ?? existing.grok
-        )
-        write(encode(merged))
-    }
-
-    static func replace(_ creds: ExtractedCredentials) {
-        write(encode(creds))
-    }
-
-    static func clear(_ provider: Provider) {
-        var creds = load()
-        switch provider {
-        case .claude: creds.claude = nil
-        case .chatGPT: creds.chatGPT = nil
-        case .grok: creds.grok = nil
+        if let grok = accounts.first(where: { $0.grok != nil }) {
+            AccountNames.remap(from: "grok", to: "grok:\(grok.id)")
         }
-        write(encode(creds))
+        if let gpt = accounts.first(where: { $0.chatGPT != nil }) {
+            AccountNames.remap(from: "chatGPT", to: "chatgpt:\(gpt.id)")
+        }
+        return CredentialStore(accounts: accounts)
     }
 
-    private static func encode(_ creds: ExtractedCredentials) -> Data? {
-        let stored = Stored(
-            claudeSessionKey: creds.claude?.sessionKey,
-            claudeLastActiveOrg: creds.claude?.lastActiveOrg,
-            chatGPTParts: creds.chatGPT?.parts.map { Stored.Part(index: $0.index, value: $0.value) },
-            chatGPTAssembled: creds.chatGPT?.assembled,
-            grokSSO: creds.grok?.sso
-        )
-        if stored.claudeSessionKey == nil && stored.chatGPTAssembled == nil && stored.chatGPTParts == nil && stored.grokSSO == nil {
-            delete()
+    private static func account(from stored: StoredAccount) -> CredentialAccount? {
+        var account = CredentialAccount(id: stored.id)
+        if let key = stored.claudeSessionKey {
+            account.claude = ClaudeCredentials(sessionKey: key, lastActiveOrg: stored.claudeLastActiveOrg)
+        }
+        if let parts = stored.chatGPTParts, !parts.isEmpty {
+            let cookieParts = parts.map { ChatGPTCredentials.CookiePart(index: $0.index, value: $0.value) }
+            account.chatGPT = ChatGPTCredentials(
+                parts: cookieParts,
+                assembled: cookieParts.map(\.value).joined(),
+                accountID: stored.chatGPTAccountID
+            )
+        } else if let assembled = stored.chatGPTAssembled {
+            account.chatGPT = ChatGPTCredentials(
+                parts: [],
+                assembled: assembled,
+                accountID: stored.chatGPTAccountID
+            )
+        }
+        if let sso = stored.grokSSO {
+            account.grok = GrokCredentials(sso: sso)
+        }
+        if account.claude == nil && account.chatGPT == nil && account.grok == nil {
             return nil
         }
+        return account
+    }
+
+    private static func encode(_ store: CredentialStore) -> Data? {
+        let stored = Stored(
+            accounts: store.accounts.map { account in
+                StoredAccount(
+                    id: account.id,
+                    claudeSessionKey: account.claude?.sessionKey,
+                    claudeLastActiveOrg: account.claude?.lastActiveOrg,
+                    chatGPTParts: account.chatGPT?.parts.map { Stored.Part(index: $0.index, value: $0.value) },
+                    chatGPTAssembled: account.chatGPT?.assembled,
+                    chatGPTAccountID: account.chatGPT?.accountID,
+                    grokSSO: account.grok?.sso
+                )
+            }
+        )
         return try? JSONEncoder().encode(stored)
     }
 

@@ -172,6 +172,7 @@ enum Fixtures {
     """
 
     static let safariChatGPTTable = """
+    _account\t00000000-0000-4000-8000-0000000000aa\tchatgpt.com\t/\t11/8/2026, 12:43:55 PM\t44 B\t\t\tLax
     __Secure-next-auth.session-token.1\t\(sampleChatGPTPart1)\t.chatgpt.com\t/\t11/13/2026, 12:23:22 PM\t213 B\t✓\t✓\tLax
     __Secure-next-auth.session-token.0\t\(sampleChatGPTPart0)\t.chatgpt.com\t/\t11/13/2026, 12:23:22 PM\t3.97 KB\t✓\t✓\tLax
     __Host-next-auth.csrf-token\tabc%7Cdef\tchatgpt.com\t/\tSession\t158 B\t✓\t✓\tLax
@@ -182,6 +183,8 @@ enum Fixtures {
     """
 
     static let sampleClaudeKey = "sk-ant-sid02-EXAMPLEKEYVALUE-0000000000000000000000000000000000000000AA"
+    static let sampleClaudeKeyB = "sk-ant-sid02-EXAMPLEKEYVALUE-0000000000000000000000000000000000000000BB"
+    static let sampleChatGPTAccountID = "00000000-0000-4000-8000-0000000000aa"
     static let sampleChatGPTPart0 = "eyJhbGciOiJkaXIiLCJlbmMiOiJBMjU2R0NNIn0.PART0PLACEHOLDER"
     static let sampleChatGPTPart1 = "PART1PLACEHOLDER.suffix"
     static let sampleChatGPTAccessToken = "placeholder-access-token"
