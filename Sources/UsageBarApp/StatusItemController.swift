@@ -49,7 +49,7 @@ final class StatusItemController: NSObject {
         }
 
         if snapshots.isEmpty && outcomes.isEmpty {
-            addDisabled("Kein Konto — Cookies einfügen…")
+            addDisabled("No account — paste cookies…")
         }
 
         for snapshot in snapshots {
@@ -65,15 +65,15 @@ final class StatusItemController: NSObject {
             case .snapshot:
                 break
             case .expired:
-                addDisabled("Anmeldung abgelaufen")
+                addDisabled("Sign-in expired")
             case .notTrackable(let message):
-                addDisabled("Nicht trackbar: \(message)")
+                addDisabled("Not trackable: \(message)")
             case .httpError(let status):
-                addDisabled(status < 0 ? "Netzwerkfehler" : "HTTP \(status)")
+                addDisabled(status < 0 ? "Network error" : "HTTP \(status)")
             case .notJSON:
-                addDisabled("Antwort war kein JSON")
+                addDisabled("Response was not JSON")
             case .empty:
-                addDisabled("Keine Limits in der Antwort")
+                addDisabled("No limits in the response")
             }
         }
 
@@ -85,16 +85,16 @@ final class StatusItemController: NSObject {
             menu.addItem(.separator())
         }
 
-        addAction("Aktualisieren", #selector(refresh), key: "r")
+        addAction("Refresh", #selector(refresh), key: "r")
         addAction("Cookies…", #selector(openSettings), key: ",")
         menu.addItem(.separator())
-        addAction("Beenden", #selector(quit), key: "q")
+        addAction("Quit", #selector(quit), key: "q")
     }
 
     private func row(for limit: Limit) -> String {
         let pct = BarPresentation.percentString(limit.utilization)
         var text = "\(limit.label)  \(pct)"
-        if limit.locked == .locked { text += "  gesperrt" }
+        if limit.locked == .locked { text += "  locked" }
         if let reset = limit.resetsAt {
             text += "  → \(resetFormatter.string(from: reset))"
         }

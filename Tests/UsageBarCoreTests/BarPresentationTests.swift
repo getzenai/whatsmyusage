@@ -7,12 +7,12 @@ struct BarPresentationTests {
 
     @Test func worstAccountLimitWinsAcrossProviders() {
         let claude = UsageOutcome.snapshot(UsageSnapshot(provider: .claude, limits: [
-            Limit(id: "session", label: "5 Stunden", utilization: 0, resetsAt: nil, locked: .unknown, scope: .account),
-            Limit(id: "weekly_all", label: "Woche", utilization: 1, resetsAt: nil, locked: .unknown, scope: .account),
-            Limit(id: "model", label: "Woche · X", utilization: 1, resetsAt: nil, locked: .unknown, scope: .model),
+            Limit(id: "session", label: "5 hours", utilization: 0, resetsAt: nil, locked: .unknown, scope: .account),
+            Limit(id: "weekly_all", label: "Week", utilization: 1, resetsAt: nil, locked: .unknown, scope: .account),
+            Limit(id: "model", label: "Week · X", utilization: 1, resetsAt: nil, locked: .unknown, scope: .model),
         ]))
         let grok = UsageOutcome.snapshot(UsageSnapshot(provider: .grok, limits: [
-            Limit(id: "fast", label: "2 Stunden · fast", utilization: 0, resetsAt: nil, locked: .unlocked, scope: .account),
+            Limit(id: "fast", label: "2 hours · fast", utilization: 0, resetsAt: nil, locked: .unlocked, scope: .account),
         ]))
 
         let bar = BarPresentation.of(outcomes: [claude, grok])
@@ -24,13 +24,13 @@ struct BarPresentationTests {
 
     @Test func grokWeeklyBeatsEmptyTwoHourWindows() {
         let windows = UsageOutcome.snapshot(UsageSnapshot(provider: .grok, limits: [
-            Limit(id: "fast", label: "2 Stunden · fast", utilization: 0, resetsAt: nil, locked: .unlocked, scope: .account),
-            Limit(id: "expert", label: "2 Stunden · expert", utilization: 0, resetsAt: nil, locked: .unlocked, scope: .account),
+            Limit(id: "fast", label: "2 hours · fast", utilization: 0, resetsAt: nil, locked: .unlocked, scope: .account),
+            Limit(id: "expert", label: "2 hours · expert", utilization: 0, resetsAt: nil, locked: .unlocked, scope: .account),
         ]))
         let weekly = UsageOutcome.snapshot(UsageSnapshot(provider: .grok, limits: [
             Limit(
                 id: "weekly",
-                label: "Woche",
+                label: "Week",
                 utilization: 0.37,
                 resetsAt: Date(timeIntervalSince1970: 1_800_000_000),
                 locked: .unknown,
@@ -46,8 +46,8 @@ struct BarPresentationTests {
 
     @Test func modelLimitCannotPaintTheBar() {
         let snap = UsageOutcome.snapshot(UsageSnapshot(provider: .claude, limits: [
-            Limit(id: "weekly_all", label: "Woche", utilization: 0.2, resetsAt: nil, locked: .unknown, scope: .account),
-            Limit(id: "model", label: "Woche · X", utilization: 1, resetsAt: nil, locked: .unknown, scope: .model),
+            Limit(id: "weekly_all", label: "Week", utilization: 0.2, resetsAt: nil, locked: .unknown, scope: .account),
+            Limit(id: "model", label: "Week · X", utilization: 1, resetsAt: nil, locked: .unknown, scope: .model),
         ]))
         let bar = BarPresentation.of(outcomes: [snap])
         #expect(bar.title == "20%")
@@ -56,7 +56,7 @@ struct BarPresentationTests {
 
     @Test func chatGPTLockPaintsCriticalEvenBelowNinety() {
         let snap = UsageOutcome.snapshot(UsageSnapshot(provider: .chatGPT, limits: [
-            Limit(id: "primary", label: "Woche", utilization: 0.5, resetsAt: nil, locked: .locked, scope: .account),
+            Limit(id: "primary", label: "Week", utilization: 0.5, resetsAt: nil, locked: .locked, scope: .account),
         ]))
         let bar = BarPresentation.of(outcomes: [snap])
         #expect(bar.tone == .critical)
@@ -67,10 +67,10 @@ struct BarPresentationTests {
     /// ranking hid the lock behind a merely high open number.
     @Test func lockedProviderBeatsHigherOpenUtilization() {
         let claude = UsageOutcome.snapshot(UsageSnapshot(provider: .claude, limits: [
-            Limit(id: "weekly_all", label: "Woche", utilization: 0.8, resetsAt: nil, locked: .unknown, scope: .account),
+            Limit(id: "weekly_all", label: "Week", utilization: 0.8, resetsAt: nil, locked: .unknown, scope: .account),
         ]))
         let chatGPT = UsageOutcome.snapshot(UsageSnapshot(provider: .chatGPT, limits: [
-            Limit(id: "primary", label: "Woche", utilization: 0.4, resetsAt: nil, locked: .locked, scope: .account),
+            Limit(id: "primary", label: "Week", utilization: 0.4, resetsAt: nil, locked: .locked, scope: .account),
         ]))
 
         for outcomes in [[claude, chatGPT], [chatGPT, claude]] {
@@ -86,10 +86,10 @@ struct BarPresentationTests {
     /// made the first input win and hid Grok at 90% behind Claude at 10%.
     @Test func unknownAndUnlockedDeferToUtilizationRegardlessOfOrder() {
         let claude = UsageOutcome.snapshot(UsageSnapshot(provider: .claude, limits: [
-            Limit(id: "weekly_all", label: "Woche", utilization: 0.1, resetsAt: nil, locked: .unknown, scope: .account),
+            Limit(id: "weekly_all", label: "Week", utilization: 0.1, resetsAt: nil, locked: .unknown, scope: .account),
         ]))
         let grok = UsageOutcome.snapshot(UsageSnapshot(provider: .grok, limits: [
-            Limit(id: "fast", label: "2 Stunden · fast", utilization: 0.9, resetsAt: nil, locked: .unlocked, scope: .account),
+            Limit(id: "fast", label: "2 hours · fast", utilization: 0.9, resetsAt: nil, locked: .unlocked, scope: .account),
         ]))
 
         for outcomes in [[claude, grok], [grok, claude]] {
@@ -102,7 +102,7 @@ struct BarPresentationTests {
 
     @Test func expiredDoesNotHideARealReading() {
         let snap = UsageOutcome.snapshot(UsageSnapshot(provider: .grok, limits: [
-            Limit(id: "fast", label: "2 Stunden · fast", utilization: 0.1, resetsAt: nil, locked: .unlocked, scope: .account),
+            Limit(id: "fast", label: "2 hours · fast", utilization: 0.1, resetsAt: nil, locked: .unlocked, scope: .account),
         ]))
         let bar = BarPresentation.of(outcomes: [.expired, snap])
         #expect(bar.title == "10%")
@@ -121,7 +121,7 @@ struct BarPresentationTests {
 
     @Test func warningBand() {
         let snap = UsageOutcome.snapshot(UsageSnapshot(provider: .claude, limits: [
-            Limit(id: "weekly_all", label: "Woche", utilization: 0.75, resetsAt: nil, locked: .unknown, scope: .account),
+            Limit(id: "weekly_all", label: "Week", utilization: 0.75, resetsAt: nil, locked: .unknown, scope: .account),
         ]))
         #expect(BarPresentation.of(outcomes: [snap]).tone == .warning)
     }

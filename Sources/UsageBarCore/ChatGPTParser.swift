@@ -58,19 +58,19 @@ enum ChatGPTParser {
     private static func windows(in object: [String: Any], locked: LockState, idPrefix: String?) -> [Limit] {
         var result: [Limit] = []
         if let primary = JSONValue.object(object["primary_window"]),
-           let limit = window(primary, id: qualify("primary", idPrefix), fallbackLabel: "Fenster", locked: locked)
+           let limit = window(primary, id: qualify("primary", idPrefix), fallbackLabel: "Window", locked: locked)
         {
             result.append(limit)
         }
         if let secondary = JSONValue.object(object["secondary_window"]),
-           let limit = window(secondary, id: qualify("secondary", idPrefix), fallbackLabel: "Zweites Fenster", locked: locked)
+           let limit = window(secondary, id: qualify("secondary", idPrefix), fallbackLabel: "Second window", locked: locked)
         {
             result.append(limit)
         }
         // A bare window object (used_percent at this level) — additional_rate_limits
         // may send that rather than wrapping it in primary_window.
         if result.isEmpty,
-           let limit = window(object, id: qualify("window", idPrefix), fallbackLabel: idPrefix ?? "Fenster", locked: locked)
+           let limit = window(object, id: qualify("window", idPrefix), fallbackLabel: idPrefix ?? "Window", locked: locked)
         {
             result.append(limit)
         }

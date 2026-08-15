@@ -1,24 +1,44 @@
 import AppKit
 import UsageBarCore
 
+/// Paste-only text view. Chrome's cookie table often lands as RTF/HTML on the
+/// pasteboard; the stock NSTextView paste then no-ops in an accessory app
+/// that has no Edit menu. Always take the plain-string flavor.
+private final class PlainPasteTextView: NSTextView {
+    override func paste(_ sender: Any?) {
+        guard let text = NSPasteboard.general.string(forType: .string) else { return }
+        insertText(text, replacementRange: selectedRange())
+    }
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        guard event.modifierFlags.contains(.command),
+              event.charactersIgnoringModifiers == "v"
+        else { return super.performKeyEquivalent(with: event) }
+        paste(nil)
+        return true
+    }
+}
+
 /// Paste window. The user drops a cookie table; we extract keys and put them
 /// in the Keychain. The raw paste never leaves this window.
 @MainActor
 final class SettingsController: NSObject, NSWindowDelegate {
     private var window: NSWindow?
-    private let editor = NSTextView()
+    private let editor = PlainPasteTextView()
     private let status = NSTextField(labelWithString: "")
     var onSaved: (() -> Void)?
 
     func show() {
+        NSApp.setActivationPolicy(.regular)
         if let window {
             window.makeKeyAndOrderFront(nil)
+            window.makeFirstResponder(editor)
             NSApp.activate(ignoringOtherApps: true)
             return
         }
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 560, height: 380),
+            contentRect: NSRect(x: 0, y: 0, width: 620, height: 520),
             styleMask: [.titled, .closable, .resizable],
             backing: .buffered,
             defer: false
@@ -32,17 +52,30 @@ final class SettingsController: NSObject, NSWindowDelegate {
         window.contentView = content
 
         let hint = NSTextField(wrappingLabelWithString: """
-        Cookie-Tabelle aus dem Browser hier einfügen (Safari: Einstellungen → Datenschutz → Cookies, oder DevTools). \
-        Claude braucht sessionKey, ChatGPT die nummerierten session-token.*-Teile, Grok sso. \
-        Mehrere Anbieter in einem Paste sind in Ordnung. Der Text wird nicht gespeichert — nur die erkannten Schlüssel wandern in die Keychain.
+        Chrome, Edge, or Brave
+        1. Log in to the provider (claude.ai, chatgpt.com, grok.com).
+        2. Open DevTools: right-click → Inspect, or View → Developer → Developer Tools, or ⌥⌘I.
+        3. Application → Storage → Cookies → the site. claude.ai and a.claude.ai are separate lists — copy both.
+        4. Click any cookie row, then ⌘A ⌘C.
+        5. Paste here (⌘V or the Paste button). Repeat for each provider, or paste them all at once.
+
+        Safari: Safari → Settings → Advanced → “Show features for web developers”, then Develop → Show Web Inspector → Storage → Cookies.
+        Firefox: right-click → Inspect → Storage → Cookies.
+
+        Claude needs sessionKey, ChatGPT the numbered session-token.* parts, Grok sso. The paste is not saved — only the keys go into the Keychain.
         """)
         hint.translatesAutoresizingMaskIntoConstraints = false
+        hint.font = .systemFont(ofSize: 11)
 
         editor.isRichText = false
+        editor.importsGraphics = false
+        editor.isEditable = true
+        editor.isSelectable = true
+        editor.allowsUndo = true
         editor.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
         editor.isAutomaticQuoteSubstitutionEnabled = false
         editor.isAutomaticTextReplacementEnabled = false
-        editor.frame = NSRect(x: 0, y: 0, width: 520, height: 200)
+        editor.frame = NSRect(x: 0, y: 0, width: 580, height: 180)
         let scroll = NSScrollView()
         scroll.translatesAutoresizingMaskIntoConstraints = false
         scroll.hasVerticalScroller = true
@@ -53,19 +86,22 @@ final class SettingsController: NSObject, NSWindowDelegate {
         editor.isVerticallyResizable = true
         editor.isHorizontallyResizable = false
         editor.autoresizingMask = [.width]
-        editor.textContainer?.containerSize = NSSize(width: 520, height: CGFloat.greatestFiniteMagnitude)
+        editor.textContainer?.containerSize = NSSize(width: 580, height: CGFloat.greatestFiniteMagnitude)
         editor.textContainer?.widthTracksTextView = true
 
         status.translatesAutoresizingMaskIntoConstraints = false
 
-        let save = NSButton(title: "In Keychain legen", target: self, action: #selector(save))
+        let paste = NSButton(title: "Paste", target: self, action: #selector(pasteFromClipboard))
+        paste.translatesAutoresizingMaskIntoConstraints = false
+        let save = NSButton(title: "Save to Keychain", target: self, action: #selector(save))
         save.translatesAutoresizingMaskIntoConstraints = false
-        let clear = NSButton(title: "Keychain leeren", target: self, action: #selector(clearAll))
+        let clear = NSButton(title: "Clear Keychain", target: self, action: #selector(clearAll))
         clear.translatesAutoresizingMaskIntoConstraints = false
 
         content.addSubview(hint)
         content.addSubview(scroll)
         content.addSubview(status)
+        content.addSubview(paste)
         content.addSubview(save)
         content.addSubview(clear)
 
@@ -80,7 +116,7 @@ final class SettingsController: NSObject, NSWindowDelegate {
             scroll.bottomAnchor.constraint(equalTo: status.topAnchor, constant: -12),
 
             status.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 16),
-            status.trailingAnchor.constraint(lessThanOrEqualTo: clear.leadingAnchor, constant: -8),
+            status.trailingAnchor.constraint(lessThanOrEqualTo: paste.leadingAnchor, constant: -8),
             status.centerYAnchor.constraint(equalTo: save.centerYAnchor),
 
             save.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -16),
@@ -88,17 +124,32 @@ final class SettingsController: NSObject, NSWindowDelegate {
 
             clear.trailingAnchor.constraint(equalTo: save.leadingAnchor, constant: -8),
             clear.centerYAnchor.constraint(equalTo: save.centerYAnchor),
+
+            paste.trailingAnchor.constraint(equalTo: clear.leadingAnchor, constant: -8),
+            paste.centerYAnchor.constraint(equalTo: save.centerYAnchor),
         ])
 
         refreshStatus()
         window.center()
         window.makeKeyAndOrderFront(nil)
+        window.makeFirstResponder(editor)
         NSApp.activate(ignoringOtherApps: true)
         self.window = window
     }
 
     func windowWillClose(_ notification: Notification) {
         editor.string = ""
+        NSApp.setActivationPolicy(.accessory)
+    }
+
+    @objc private func pasteFromClipboard() {
+        guard let text = NSPasteboard.general.string(forType: .string), !text.isEmpty else {
+            status.stringValue = "Clipboard is empty."
+            return
+        }
+        editor.string = text
+        editor.scrollToEndOfDocument(nil)
+        window?.makeFirstResponder(editor)
     }
 
     @objc private func save() {
@@ -107,25 +158,25 @@ final class SettingsController: NSObject, NSWindowDelegate {
             let extracted = try SessionCookies.extractSessionKey(from: pasted)
             KeychainStore.save(extracted)
             editor.string = ""
-            status.stringValue = summary(of: extracted, verb: "gespeichert")
+            status.stringValue = summary(of: extracted, verb: "saved")
             onSaved?()
         } catch {
-            status.stringValue = "Kein Schlüssel erkannt. Claude: sessionKey. ChatGPT: session-token.0/.1. Grok: sso."
+            status.stringValue = "No key found. Claude: sessionKey. ChatGPT: session-token.0/.1. Grok: sso."
         }
     }
 
     @objc private func clearAll() {
         KeychainStore.replace(ExtractedCredentials())
-        status.stringValue = "Keychain geleert."
+        status.stringValue = "Keychain cleared."
         onSaved?()
     }
 
     private func refreshStatus() {
         let creds = KeychainStore.load()
         if creds.isEmpty {
-            status.stringValue = "Noch kein Konto in der Keychain."
+            status.stringValue = "No account in the Keychain yet."
         } else {
-            status.stringValue = summary(of: creds, verb: "in der Keychain")
+            status.stringValue = summary(of: creds, verb: "in the Keychain")
         }
     }
 
@@ -134,7 +185,7 @@ final class SettingsController: NSObject, NSWindowDelegate {
         if creds.claude != nil { bits.append("Claude") }
         if let gpt = creds.chatGPT {
             let n = gpt.parts.isEmpty ? 1 : gpt.parts.count
-            bits.append("ChatGPT (\(n) Teil\(n == 1 ? "" : "e"))")
+            bits.append("ChatGPT (\(n) part\(n == 1 ? "" : "s"))")
         }
         if creds.grok != nil { bits.append("Grok") }
         return bits.joined(separator: ", ") + " \(verb)."

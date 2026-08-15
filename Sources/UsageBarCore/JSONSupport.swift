@@ -98,21 +98,21 @@ enum WindowLabel {
     /// Turns a window length into something readable. Unknown lengths stay as seconds
     /// rather than being forced into a name we made up.
     static func from(seconds: Double?) -> String {
-        guard let seconds, seconds > 0 else { return "Fenster" }
+        guard let seconds, seconds > 0 else { return "Window" }
         let s = Int(seconds.rounded())
         switch s {
-        case 3600: return "1 Stunde"
-        case 7200: return "2 Stunden"
-        case 86400: return "Tag"
-        case 604_800: return "Woche"
+        case 3600: return "1 hour"
+        case 7200: return "2 hours"
+        case 86400: return "Day"
+        case 604_800: return "Week"
         default:
             if s % 86400 == 0 {
                 let days = s / 86400
-                return days == 1 ? "Tag" : "\(days) Tage"
+                return days == 1 ? "Day" : "\(days) days"
             }
             if s % 3600 == 0 {
                 let hours = s / 3600
-                return hours == 1 ? "1 Stunde" : "\(hours) Stunden"
+                return hours == 1 ? "1 hour" : "\(hours) hours"
             }
             return "\(s) s"
         }

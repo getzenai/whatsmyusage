@@ -46,7 +46,7 @@ struct ClaudeParserTests {
     @Test func modelLimitDoesNotDriveTheBar() throws {
         let snap = try snapshot(Fixtures.claudeModelHigher)
         let model = try #require(snap.limits.first { $0.scope == .model })
-        #expect(model.label == "Woche · ExampleModel")
+        #expect(model.label == "Week · ExampleModel")
         #expect(model.utilization == 0.35)
         #expect(snap.worstAccountLimit?.utilization == 0.20)
     }

@@ -47,7 +47,7 @@ enum GrokParser {
 
         return Limit(
             id: "weekly",
-            label: "Woche",
+            label: "Week",
             utilization: Double(percent) / 100,
             resetsAt: resetsAt,
             locked: Double(percent) >= 100 ? .locked : .unknown,

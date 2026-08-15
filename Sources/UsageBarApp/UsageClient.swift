@@ -53,7 +53,7 @@ struct UsageClient {
         if trackable.isEmpty {
             // Cookie works, but no chat org. Surface the API-console 403s rather
             // than pretending there is nothing.
-            return orgs.isEmpty ? [.empty] : [.notTrackable(message: "keine Chat-Organisation")]
+            return orgs.isEmpty ? [.empty] : [.notTrackable(message: "no chat organization")]
         }
 
         var outcomes: [UsageOutcome] = []
