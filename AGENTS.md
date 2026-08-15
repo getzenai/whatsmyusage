@@ -15,6 +15,9 @@ Read `README.md` and `docs/` before changing parsers or cookie handling.
   the cookie is dead. 403 on a single Claude org's `/usage` with `permission_error`
   means that org is not trackable. Greying the whole Claude tracking on that 403
   hides a healthy session.
+- ChatGPT `/backend-api/` rejects cookies. Mint a Bearer from `GET /api/auth/session`
+  (`accessToken`). A 200 session body without `accessToken` is expired — not a later
+  401 on `wham/usage`.
 - Do not invent a lock state the provider does not send. ChatGPT has `allowed`.
   Grok has a remaining count of zero. Claude has percentages only — lock stays
   `unknown`.

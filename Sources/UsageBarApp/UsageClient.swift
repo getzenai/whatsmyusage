@@ -85,15 +85,25 @@ struct UsageClient {
     // MARK: - ChatGPT
 
     private func fetchChatGPT(_ creds: ChatGPTCredentials) async -> UsageOutcome {
-        let response = await get(
-            url: URL(string: "https://chatgpt.com/backend-api/wham/usage")!,
+        let session = await get(
+            url: URL(string: "https://chatgpt.com/api/auth/session")!,
             cookie: creds.cookieHeader
         )
-        return UsageParser.parseUsage(
-            provider: .chatGPT,
-            statusCode: response.status,
-            body: response.body
-        )
+        switch UsageParser.chatGPTAccessToken(statusCode: session.status, body: session.body) {
+        case .failed(let outcome):
+            return outcome
+        case .bearer(let token):
+            let response = await get(
+                url: URL(string: "https://chatgpt.com/backend-api/wham/usage")!,
+                cookie: creds.cookieHeader,
+                authorization: "Bearer \(token)"
+            )
+            return UsageParser.parseUsage(
+                provider: .chatGPT,
+                statusCode: response.status,
+                body: response.body
+            )
+        }
     }
 
     // MARK: - Grok
@@ -124,10 +134,13 @@ struct UsageClient {
         var body: Data
     }
 
-    private func get(url: URL, cookie: String) async -> HTTPResponse {
+    private func get(url: URL, cookie: String, authorization: String? = nil) async -> HTTPResponse {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.setValue(cookie, forHTTPHeaderField: "Cookie")
+        if let authorization {
+            request.setValue(authorization, forHTTPHeaderField: "Authorization")
+        }
         return await send(request)
     }
 

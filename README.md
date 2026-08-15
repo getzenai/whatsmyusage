@@ -65,6 +65,8 @@ Auffrischung zusätzlich alle fünf Minuten.
   (nach Index sortiert, als nummerierte Cookies gesendet), Grok `sso`
 - `UsageParser.parseUsage` — HTTP-Status + Body → gemeinsames Modell
   (Bezeichnung, Auslastung 0…1, optionale Zurücksetzung, gesperrt ja/nein/**unbekannt**)
+- `UsageParser.chatGPTAccessToken` — `/api/auth/session` → Bearer; fehlt
+  `accessToken`, ist die Sitzung abgelaufen
 - 401 = abgelaufen; 403 auf einer Claude-Org = diese Org ist nicht trackbar;
   403 auf ChatGPT/Grok ist **kein** Logout (Cloudflare)
 

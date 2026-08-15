@@ -93,6 +93,23 @@ enum Fixtures {
     }
     """
 
+    /// Shape of `GET /api/auth/session` when the cookie still mints a backend token.
+    static let chatGPTSession = """
+    {
+      "user": {"name": "Example"},
+      "expires": "2026-11-13T00:00:00.000Z",
+      "accessToken": "\(sampleChatGPTAccessToken)"
+    }
+    """
+
+    /// Same endpoint, cookie present but no mint — that is expired, not a later 401.
+    static let chatGPTSessionLoggedOut = """
+    {
+      "user": {"name": "Example"},
+      "expires": "2026-11-13T00:00:00.000Z"
+    }
+    """
+
     static let chatGPTLocked = """
     {
       "user_id": "user-placeholder",
@@ -167,5 +184,6 @@ enum Fixtures {
     static let sampleClaudeKey = "sk-ant-sid02-EXAMPLEKEYVALUE-0000000000000000000000000000000000000000AA"
     static let sampleChatGPTPart0 = "eyJhbGciOiJkaXIiLCJlbmMiOiJBMjU2R0NNIn0.PART0PLACEHOLDER"
     static let sampleChatGPTPart1 = "PART1PLACEHOLDER.suffix"
+    static let sampleChatGPTAccessToken = "placeholder-access-token"
     static let sampleGrokSSO = "sso-placeholder-value-xxxxxxxx"
 }

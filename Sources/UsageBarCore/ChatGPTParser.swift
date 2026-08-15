@@ -1,6 +1,20 @@
 import Foundation
 
 enum ChatGPTParser {
+    /// `/api/auth/session` mints the bearer that `/backend-api/` actually accepts.
+    /// A JSON body without `accessToken` is expired — not a later 401 on usage.
+    static func parseAccessToken(_ body: Data) -> ChatGPTAuth {
+        guard let obj = try? JSONSerialization.jsonObject(with: body) else {
+            return .failed(.notJSON)
+        }
+        guard let root = obj as? [String: Any],
+              let token = JSONValue.string(root["accessToken"])
+        else {
+            return .failed(.expired)
+        }
+        return .bearer(token)
+    }
+
     static func parseUsage(_ root: [String: Any], accountLabel: String?) -> UsageOutcome {
         let locked = lockState(root)
         var limits: [Limit] = []

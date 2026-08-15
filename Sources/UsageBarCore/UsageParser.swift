@@ -21,6 +21,12 @@ public enum UsageOutcome: Equatable, Sendable {
     case empty
 }
 
+/// Result of reading ChatGPT `/api/auth/session`.
+public enum ChatGPTAuth: Equatable, Sendable {
+    case bearer(String)
+    case failed(UsageOutcome)
+}
+
 public struct ParseContext: Equatable, Sendable {
     public var grokModel: String
     public var accountLabel: String?
@@ -72,6 +78,16 @@ public enum UsageParser {
 
     public static func claudeOrganizations(from data: Data) -> [ClaudeOrg] {
         ClaudeParser.parseBootstrapData(data)
+    }
+
+    /// ChatGPT `/api/auth/session` → bearer for `/backend-api/wham/usage`.
+    /// A 200 without `accessToken` is expired. That field is the proof the cookie
+    /// still mints a backend token — not a 401 on the usage call, which rejects
+    /// cookies even when the session is live.
+    public static func chatGPTAccessToken(statusCode: Int, body: Data) -> ChatGPTAuth {
+        if statusCode == 401 { return .failed(.expired) }
+        guard statusCode == 200 else { return .failed(.httpError(status: statusCode)) }
+        return ChatGPTParser.parseAccessToken(body)
     }
 
     /// 401 everywhere = expired. 403 on Claude bootstrap = expired. 403 on Claude

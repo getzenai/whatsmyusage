@@ -58,6 +58,19 @@ struct ChatGPTParserTests {
         #expect(parse("{}", status: 401) == .expired)
     }
 
+    @Test func sessionWithoutAccessTokenIsExpired() {
+        let body = Data(Fixtures.chatGPTSessionLoggedOut.utf8)
+        #expect(UsageParser.chatGPTAccessToken(statusCode: 200, body: body) == .failed(.expired))
+    }
+
+    @Test func sessionWithAccessTokenYieldsBearer() {
+        let body = Data(Fixtures.chatGPTSession.utf8)
+        #expect(
+            UsageParser.chatGPTAccessToken(statusCode: 200, body: body)
+                == .bearer(Fixtures.sampleChatGPTAccessToken)
+        )
+    }
+
     @Test func missingWindowsIsEmpty() {
         #expect(parse(#"{"plan_type":"team","rate_limit":{}}"#) == .empty)
     }
