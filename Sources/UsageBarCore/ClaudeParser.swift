@@ -68,7 +68,7 @@ enum ClaudeParser {
         return .snapshot(UsageSnapshot(provider: .claude, limits: [
             Limit(
                 id: "bootstrap",
-                label: "angemeldet",
+                label: "signed in",
                 utilization: 0,
                 resetsAt: nil,
                 locked: .unknown,

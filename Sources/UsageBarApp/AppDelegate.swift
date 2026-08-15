@@ -15,6 +15,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.onRefresh = { [weak self] in self?.refresh() }
         controller.onOpenSettings = { [weak self] in self?.settings.show() }
         controller.onQuit = { NSApp.terminate(nil) }
+        controller.onRename = { [weak controller] id, name in
+            AccountNames.setName(name, for: id)
+            controller?.refreshTooltip()
+        }
         statusItem = controller
         settings.onSaved = { [weak self] in self?.refresh() }
 
@@ -57,12 +61,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let creds = KeychainStore.load()
             if creds.isEmpty {
                 self.statusItem?.update(outcomes: [])
+                self.settings.didRefresh(outcomes: [])
                 return
             }
             let byProvider = await self.client.refresh(using: creds)
             if Task.isCancelled { return }
+            self.statusItem?.update(byProvider: byProvider)
             let outcomes = Provider.allCases.flatMap { byProvider[$0] ?? [] }
-            self.statusItem?.update(outcomes: outcomes)
+            self.settings.didRefresh(outcomes: outcomes)
         }
     }
 }

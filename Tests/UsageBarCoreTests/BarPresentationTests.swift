@@ -144,4 +144,110 @@ struct BarPresentationTests {
         #expect(snap.worstAccountLimit == nil)
         #expect(BarPresentation.of(outcomes: [.snapshot(snap)]).tone == .idle)
     }
+
+    @Test func pillHasOneSegmentPerAccountNotOnePercent() {
+        let claude = UsageOutcome.snapshot(UsageSnapshot(
+            provider: .claude,
+            trackingID: "claude:org-a",
+            accountLabel: "Org A",
+            limits: [
+                Limit(id: "week", label: "Week", utilization: 0.14, resetsAt: nil, locked: .unknown, scope: .account),
+            ]
+        ))
+        let chatGPT = UsageOutcome.snapshot(UsageSnapshot(provider: .chatGPT, limits: [
+            Limit(id: "primary", label: "Week", utilization: 1, resetsAt: nil, locked: .locked, scope: .account),
+        ]))
+        let grok = UsageOutcome.snapshot(UsageSnapshot(provider: .grok, limits: [
+            Limit(id: "weekly", label: "Week", utilization: 0.21, resetsAt: nil, locked: .unknown, scope: .account),
+        ]))
+
+        let bar = BarPresentation.of(outcomes: [claude, chatGPT, grok])
+        #expect(bar.segments.map(\.provider) == [.claude, .chatGPT, .grok])
+        #expect(bar.segments.map(\.tone) == [.ok, .critical, .ok])
+        #expect(bar.segments[0].name == "Org A")
+        // Dominant title stays the worst reading — the pill is the segments.
+        #expect(bar.title == "100%")
+        #expect(bar.tone == .critical)
+    }
+
+    @Test func twoClaudeOrgsAreTwoSegments() {
+        let a = UsageOutcome.snapshot(UsageSnapshot(
+            provider: .claude,
+            trackingID: "claude:a",
+            accountLabel: "A",
+            limits: [Limit(id: "w", label: "Week", utilization: 0.1, resetsAt: nil, locked: .unknown, scope: .account)]
+        ))
+        let b = UsageOutcome.snapshot(UsageSnapshot(
+            provider: .claude,
+            trackingID: "claude:b",
+            accountLabel: "B",
+            limits: [Limit(id: "w", label: "Week", utilization: 0.9, resetsAt: nil, locked: .unknown, scope: .account)]
+        ))
+        let bar = BarPresentation.of(outcomes: [a, b])
+        #expect(bar.segments.count == 2)
+        #expect(bar.segments.map(\.trackingID) == ["claude:a", "claude:b"])
+        #expect(bar.segments.map(\.tone) == [.ok, .critical])
+    }
+
+    @Test func grokWindowsMergeIntoOneCard() {
+        let fast = UsageOutcome.snapshot(UsageSnapshot(
+            provider: .grok,
+            accountLabel: "fast",
+            limits: [Limit(id: "fast", label: "Fast · 2 hours", utilization: 0, resetsAt: nil, locked: .unlocked, scope: .account)]
+        ))
+        let weekly = UsageOutcome.snapshot(UsageSnapshot(provider: .grok, limits: [
+            Limit(id: "weekly", label: "Week", utilization: 0.21, resetsAt: nil, locked: .unknown, scope: .account),
+        ]))
+        let cards = BarPresentation.cards(from: [fast, weekly])
+        #expect(cards.count == 1)
+        #expect(cards[0].provider == .grok)
+        #expect(cards[0].trackingID == "grok")
+        #expect(Set(cards[0].limits.map(\.id)) == ["fast", "weekly"])
+        #expect(BarPresentation.of(outcomes: [fast, weekly]).segments.count == 1)
+    }
+
+    @Test func accountCardDoesNotRepeatTheOrgOnEveryLimit() {
+        let snap = UsageSnapshot(
+            provider: .claude,
+            trackingID: "claude:org",
+            accountLabel: "Zen",
+            limits: [
+                Limit(id: "session", label: "5 hours", utilization: 0.01, resetsAt: nil, locked: .unknown, scope: .account),
+                Limit(id: "week", label: "Week", utilization: 0.14, resetsAt: nil, locked: .unknown, scope: .account),
+            ]
+        )
+        let card = BarPresentation.cards(from: [.snapshot(snap)])[0]
+        #expect(card.defaultName == "Zen")
+        #expect(Set(card.limits.map(\.label)) == ["5 hours", "Week"])
+    }
+
+    @Test func expiredProviderBecomesAGraySegmentBesideALiveOne() {
+        let grok = UsageOutcome.snapshot(UsageSnapshot(provider: .grok, limits: [
+            Limit(id: "weekly", label: "Week", utilization: 0.2, resetsAt: nil, locked: .unknown, scope: .account),
+        ]))
+        let bar = BarPresentation.of(byProvider: [
+            .chatGPT: [.expired],
+            .grok: [grok],
+        ])
+        #expect(bar.segments.map(\.provider) == [.chatGPT, .grok])
+        #expect(bar.segments[0].tone == .expired)
+        #expect(bar.segments[1].tone == .ok)
+        #expect(bar.title == "20%")
+    }
+
+    @Test func resetIsRemainingTimeNotADate() {
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        #expect(ResetFormatting.remaining(until: now.addingTimeInterval(2 * 86_400 + 5 * 3600), now: now) == "in 2d 5h")
+        #expect(ResetFormatting.remaining(until: now.addingTimeInterval(3 * 86_400), now: now) == "in 3d")
+        #expect(ResetFormatting.remaining(until: now.addingTimeInterval(2 * 3600 + 30 * 60), now: now) == "in 2h 30m")
+        #expect(ResetFormatting.remaining(until: now.addingTimeInterval(45 * 60), now: now) == "in 45m")
+        #expect(ResetFormatting.remaining(until: now.addingTimeInterval(-10), now: now) == "resetting")
+    }
+
+    @Test func withIDPrefixKeepsTheHumanLabel() {
+        let limit = Limit(id: "session", label: "5 hours", utilization: 0.1, resetsAt: nil, locked: .unknown, scope: .account)
+        let tagged = limit.withIDPrefix("org-1")
+        #expect(tagged.id == "org-1/session")
+        #expect(tagged.label == "5 hours")
+    }
 }
