@@ -19,7 +19,13 @@ enum GrokParser {
         }
 
         if limits.isEmpty { return .empty }
-        return .snapshot(UsageSnapshot(provider: .grok, accountLabel: accountLabel ?? model, limits: limits))
+        // Fast / Expert are windows on the same Grok account — never their own card.
+        return .snapshot(UsageSnapshot(
+            provider: .grok,
+            trackingID: "grok",
+            accountLabel: accountLabel,
+            limits: limits
+        ))
     }
 
     /// `GetGrokCreditsConfig` (grpc-web). Only a weekly period (`1.8.1 == 2`)
@@ -79,6 +85,12 @@ enum GrokParser {
 
     private static func label(for obj: [String: Any], model: String) -> String {
         let window = WindowLabel.from(seconds: JSONValue.number(obj["windowSizeSeconds"]))
-        return "\(window) · \(model)"
+        return "\(displayModel(model)) · \(window)"
+    }
+
+    /// "fast" is a model name, not a second Grok account.
+    private static func displayModel(_ model: String) -> String {
+        guard let first = model.first else { return model }
+        return String(first).uppercased() + model.dropFirst()
     }
 }

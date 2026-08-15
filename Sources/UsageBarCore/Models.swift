@@ -70,6 +70,19 @@ public struct Limit: Equatable, Sendable, Identifiable {
         self.severity = severity
     }
 
+    /// Keep the human label. The org name belongs on the card header, not on every row.
+    public func withIDPrefix(_ prefix: String) -> Limit {
+        Limit(
+            id: "\(prefix)/\(id)",
+            label: label,
+            utilization: utilization,
+            resetsAt: resetsAt,
+            locked: locked,
+            scope: scope,
+            severity: severity
+        )
+    }
+
     public func prefixed(id prefix: String, label qualifier: String) -> Limit {
         Limit(
             id: "\(prefix)/\(id)",
@@ -86,14 +99,27 @@ public struct Limit: Equatable, Sendable, Identifiable {
 /// One successful reading from one provider.
 public struct UsageSnapshot: Equatable, Sendable {
     public let provider: Provider
+    /// Stable id for rename + pill segment. Not an org name — those change.
+    public let trackingID: String
     /// Local display only (org name, plan). Never logged or committed.
     public let accountLabel: String?
     public let limits: [Limit]
+    /// Set when this tracking failed but a sibling from the same provider lived.
+    /// Empty limits plus a diagnostic must still produce a card — silence looks like health.
+    public let diagnostic: String?
 
-    public init(provider: Provider, accountLabel: String? = nil, limits: [Limit]) {
+    public init(
+        provider: Provider,
+        trackingID: String? = nil,
+        accountLabel: String? = nil,
+        limits: [Limit],
+        diagnostic: String? = nil
+    ) {
         self.provider = provider
+        self.trackingID = trackingID ?? provider.rawValue
         self.accountLabel = accountLabel
         self.limits = limits
+        self.diagnostic = diagnostic
     }
 
     /// The limit the bar must show: a lock outranks any open number; among equals,

@@ -69,14 +69,23 @@ struct UsageClient {
                 context: ParseContext(accountLabel: org.name)
             )
             if case .snapshot(let snap) = outcome {
-                let prefixed = snap.limits.map { $0.prefixed(id: org.id, label: org.name) }
+                let unique = snap.limits.map { $0.withIDPrefix(org.id) }
                 outcomes.append(.snapshot(UsageSnapshot(
                     provider: .claude,
+                    trackingID: "claude:\(org.id)",
                     accountLabel: org.name,
-                    limits: prefixed
+                    limits: unique
                 )))
             } else {
-                outcomes.append(outcome)
+                // Keep the org visible. Dropping this row is the same class of
+                // bug as a silent 0 %: the healthy sibling would hide the failure.
+                outcomes.append(.snapshot(UsageSnapshot(
+                    provider: .claude,
+                    trackingID: "claude:\(org.id)",
+                    accountLabel: org.name,
+                    limits: [],
+                    diagnostic: Self.diagnostic(for: outcome)
+                )))
             }
         }
         return outcomes
@@ -109,7 +118,8 @@ struct UsageClient {
     // MARK: - Grok
 
     private func fetchGrok(_ creds: GrokCredentials) async -> [UsageOutcome] {
-        var outcomes: [UsageOutcome] = []
+        var limits: [Limit] = []
+        var errors: [UsageOutcome] = []
         for model in grokModels {
             let body = (try? JSONSerialization.data(withJSONObject: ["modelName": model])) ?? Data()
             let response = await post(
@@ -117,12 +127,17 @@ struct UsageClient {
                 cookie: creds.cookieHeader,
                 json: body
             )
-            outcomes.append(UsageParser.parseUsage(
+            let outcome = UsageParser.parseUsage(
                 provider: .grok,
                 statusCode: response.status,
                 body: response.body,
                 context: ParseContext(grokModel: model)
-            ))
+            )
+            if case .snapshot(let snap) = outcome {
+                limits.append(contentsOf: snap.limits)
+            } else {
+                errors.append(outcome)
+            }
         }
         // Weekly is a separate call. If it fails, keep the 2-hour windows —
         // do not turn the whole provider into "!".
@@ -131,8 +146,17 @@ struct UsageClient {
             cookie: creds.cookieHeader
         )
         if weekly.status == 200, let limit = UsageParser.parseGrokWeekly(body: weekly.body) {
-            outcomes.append(.snapshot(UsageSnapshot(provider: .grok, limits: [limit])))
+            limits.append(limit)
         }
+        var outcomes: [UsageOutcome] = []
+        if !limits.isEmpty {
+            outcomes.append(.snapshot(UsageSnapshot(
+                provider: .grok,
+                trackingID: "grok",
+                limits: limits
+            )))
+        }
+        outcomes.append(contentsOf: errors)
         return outcomes
     }
 
@@ -171,6 +195,23 @@ struct UsageClient {
         // Empty protobuf message: data flag + 4-byte zero length. Measured.
         request.httpBody = Data([0x00, 0x00, 0x00, 0x00, 0x00])
         return await send(request)
+    }
+
+    private static func diagnostic(for outcome: UsageOutcome) -> String {
+        switch outcome {
+        case .expired:
+            return "Sign-in expired"
+        case .notTrackable(let message):
+            return "Not trackable: \(message)"
+        case .httpError(let status):
+            return status < 0 ? "Network error" : "HTTP \(status)"
+        case .notJSON:
+            return "Response was not JSON"
+        case .empty:
+            return "No limits in the response"
+        case .snapshot:
+            return "Unknown error"
+        }
     }
 
     private func send(_ request: URLRequest) async -> HTTPResponse {

@@ -42,13 +42,17 @@ Scripts/make-app-bundle.sh        # → .build/AI Usage Bar.app
 open ".build/AI Usage Bar.app"
 ```
 
-The app is a menu bar accessory (no Dock icon). UI is English. On first launch the
-cookie window opens. Chrome: log in → right-click Inspect / ⌥⌘I → Application →
-Storage → Cookies → the site (claude.ai and a.claude.ai are separate) → ⌘A ⌘C.
-Paste in the window. Only the keys go into the Keychain, not the raw text.
+The app is a menu bar accessory (no Dock icon). UI is English. First launch is a
+short wizard: welcome → paste cookies → here’s what we found → close and use the
+bar. Chrome: log in → right-click Inspect / ⌥⌘I → Application → Storage → Cookies
+→ the site (claude.ai and a.claude.ai are separate) → ⌘A ⌘C. Paste in the window.
+Only the keys go into the Keychain, not the raw text.
 
-Die Leiste zeigt das **schlimmste account-weite Limit** über alle Anbieter. Ein volles
-Modell-Limit (z. B. nur ein Claude-Modell) färbt die Leiste nicht — das steht im Menü.
+The menu bar shows a **pill with one coloured slot per account**. Colour is the
+worst *account-wide* limit of that subscription (green < 70 %, orange < 90 %,
+red otherwise). A full model limit (for example one Claude model) does not paint
+the slot — it stays in the popover. Click the pill for progress bars, remaining
+time until reset, and rename.
 
 | Key | Action |
 |---|---|
