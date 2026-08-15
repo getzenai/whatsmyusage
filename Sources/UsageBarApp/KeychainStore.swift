@@ -46,10 +46,10 @@ enum KeychainStore {
         for legacy in AppIdentity.legacyKeychainServices {
             guard let data = read(service: legacy) else { continue }
             let loaded = decode(data)
-            if !loaded.store.isEmpty {
-                write(encode(loaded.store))
-                delete(service: legacy)
-            }
+            // An empty or unreadable item is not a hit — try the older name.
+            guard !loaded.store.isEmpty else { continue }
+            write(encode(loaded.store))
+            delete(service: legacy)
             return loaded.store
         }
         return CredentialStore()
