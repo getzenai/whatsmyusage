@@ -5,6 +5,11 @@
 # and a menu bar app needs a real .app bundle for LSUIElement (no Dock icon).
 #
 # Usage: Scripts/make-app-bundle.sh [debug|release]   (default: release)
+#
+# Sign with a stable identity so Keychain does not treat every rebuild as a
+# new app. Override with USAGE_BAR_SIGN_IDENTITY. If unset, the script uses
+# "Helios Local Signing" when that certificate is in the Keychain, otherwise
+# ad-hoc (`-`). Ad-hoc identity is the binary hash — it changes every build.
 set -euo pipefail
 
 CONFIGURATION="${1:-release}"
@@ -58,10 +63,19 @@ cat > "$APP_PATH/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
-SIGN_IDENTITY="${USAGE_BAR_SIGN_IDENTITY:--}"
+if [ -n "${USAGE_BAR_SIGN_IDENTITY:-}" ]; then
+    SIGN_IDENTITY="$USAGE_BAR_SIGN_IDENTITY"
+elif security find-certificate -c "Helios Local Signing" >/dev/null 2>&1; then
+    # find-identity -v can list zero identities even when the Helios cert
+    # is present (key not yet unlocked). Prefer the named cert over ad-hoc.
+    SIGN_IDENTITY="Helios Local Signing"
+else
+    SIGN_IDENTITY="-"
+fi
 echo "==> Signing with identity: $SIGN_IDENTITY"
 codesign --force --sign "$SIGN_IDENTITY" --timestamp=none "$APP_PATH"
 codesign --verify --verbose=2 "$APP_PATH"
+codesign -d -r- "$APP_PATH" 2>&1 | sed -n 's/^.*designated => /designated => /p'
 
 echo
 echo "Built $APP_PATH"

@@ -33,7 +33,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
 
     func refreshTooltip() {
         if let button = statusItem.button {
-            button.toolTip = tooltip(for: BarPresentation.of(outcomes: outcomes))
+            button.toolTip = tooltip(for: BarPresentation.showing(cards))
         }
     }
 
@@ -49,12 +49,15 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     }
 
     func update(byProvider: [Provider: [UsageOutcome]], error: String? = nil) {
+        update(cards: BarPresentation.cards(byProvider: byProvider), byProvider: byProvider, error: error)
+    }
+
+    func update(cards: [AccountCard], byProvider: [Provider: [UsageOutcome]], error: String? = nil) {
         let flat = Provider.allCases.flatMap { byProvider[$0] ?? [] }
         self.outcomes = flat
         self.lastError = error
-        let presentation = BarPresentation.of(byProvider: byProvider)
-        self.cards = presentation.cards
-        render(presentation)
+        self.cards = cards
+        render(BarPresentation.showing(cards))
         if popover.isShown {
             installPopoverContent()
         }

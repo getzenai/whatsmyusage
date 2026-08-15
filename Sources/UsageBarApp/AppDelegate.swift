@@ -21,14 +21,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         statusItem = controller
         settings.onSaved = { [weak self] in self?.refresh() }
+        settings.onPreferencesChanged = { [weak self] in self?.reapply() }
 
-        refresh()
         let timer = Timer.scheduledTimer(withTimeInterval: 5 * 60, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.refresh() }
         }
         timer.tolerance = 30
         refreshTimer = timer
 
+        if !OnboardingState.didFinishWelcome {
+            settings.show(startingAt: .welcome)
+            return
+        }
+
+        refresh()
         if KeychainStore.load().isEmpty {
             settings.show()
         }
@@ -40,6 +46,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let appItem = NSMenuItem()
         main.addItem(appItem)
         let appMenu = NSMenu()
+        appMenu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
         appMenu.addItem(withTitle: "Quit AI Usage Bar", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appItem.submenu = appMenu
 
@@ -54,20 +61,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.mainMenu = main
     }
 
+    private var lastByProvider: [Provider: [UsageOutcome]] = [:]
+
+    @objc private func openSettings() {
+        settings.show()
+    }
+
     private func refresh() {
+        guard OnboardingState.didFinishWelcome else { return }
         inflight?.cancel()
         inflight = Task { [weak self] in
             guard let self else { return }
-            let creds = KeychainStore.load()
-            if creds.isEmpty {
+            let store = KeychainStore.load()
+            if store.isEmpty {
+                self.lastByProvider = [:]
                 self.statusItem?.update(outcomes: [])
                 self.settings.didRefresh(byProvider: [:])
                 return
             }
-            let byProvider = await self.client.refresh(using: creds)
+            let result = await self.client.refresh(using: store)
             if Task.isCancelled { return }
-            self.statusItem?.update(byProvider: byProvider)
-            self.settings.didRefresh(byProvider: byProvider)
+            if !result.claudeOrgIDsByAccountID.isEmpty {
+                KeychainStore.recordClaudeOrgs(result.claudeOrgIDsByAccountID)
+            }
+            self.lastByProvider = result.byProvider
+            self.apply(result.byProvider)
         }
+    }
+
+    private func reapply() {
+        apply(lastByProvider)
+    }
+
+    private func apply(_ byProvider: [Provider: [UsageOutcome]]) {
+        let raw = BarPresentation.cards(byProvider: byProvider)
+        let shown = DisplayStore.load().applied(to: raw)
+        statusItem?.update(cards: shown, byProvider: byProvider)
+        settings.didRefresh(byProvider: byProvider)
     }
 }

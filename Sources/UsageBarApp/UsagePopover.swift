@@ -12,7 +12,7 @@ struct UsagePopoverView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             if cards.isEmpty {
-                Text("No account — paste cookies to get started.")
+                Text("No account — open Settings to paste cookies.")
                     .font(.system(size: 13))
                     .foregroundStyle(.primary)
                     .padding(16)
@@ -26,7 +26,7 @@ struct UsagePopoverView: View {
             Divider().opacity(0.35)
             HStack(spacing: 12) {
                 Button("Refresh", action: onRefresh)
-                Button("Cookies…", action: onCookies)
+                Button("Settings…", action: onCookies)
                 Spacer()
                 Button("Quit", action: onQuit)
             }
@@ -75,9 +75,6 @@ private struct AccountCardView: View {
                         .help("Click to rename")
                 }
                 Spacer(minLength: 8)
-                Text(card.provider.displayName)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.secondary)
             }
 
             if let message = card.message {

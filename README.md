@@ -42,11 +42,28 @@ Scripts/make-app-bundle.sh        # → .build/AI Usage Bar.app
 open ".build/AI Usage Bar.app"
 ```
 
+Sign with a stable identity. Ad-hoc (`-`, the script default when no
+certificate is present) makes the Keychain treat every rebuild as a new app
+and prompt again. On this machine the script picks `Helios Local Signing`
+when that certificate is in the Keychain. Override with:
+
+```
+USAGE_BAR_SIGN_IDENTITY="Helios Local Signing" Scripts/make-app-bundle.sh
+```
+
+The first open of a newly signed build still needs right-click → Open
+(self-signed, Gatekeeper). After that the Keychain asks once, then stays quiet.
+
 The app is a menu bar accessory (no Dock icon). UI is English. First launch is a
-short wizard: welcome → paste cookies → here’s what we found → close and use the
-bar. Chrome: log in → right-click Inspect / ⌥⌘I → Application → Storage → Cookies
-→ the site (claude.ai and a.claude.ai are separate) → ⌘A ⌘C. Paste in the window.
-Only the keys go into the Keychain, not the raw text.
+short wizard: welcome (Keychain warning) → paste cookies → here’s what we found
+→ close and use the bar. Chrome: log in → right-click Inspect / ⌥⌘I → Application
+→ Storage → Cookies → the site (claude.ai and a.claude.ai are separate) → ⌘A ⌘C.
+Paste in the window. Only the session keys go into the Keychain; the rest of the
+paste is discarded. Two logins of the same provider (two Claude Max emails) are
+two rows. Pasting a refreshed cookie for the same login updates that row.
+
+Settings (the old Cookies window) can hide individual limits, hide an account,
+and reorder cards. That order is the popover and the pill.
 
 The menu bar shows a **pill with one coloured slot per account**. Colour is the
 worst *account-wide* limit of that subscription (green < 70 %, orange < 90 %,
@@ -57,7 +74,7 @@ time until reset, and rename.
 | Key | Action |
 |---|---|
 | ⌘R | Refresh |
-| ⌘, | Cookies |
+| ⌘, | Settings |
 | ⌘Q | Quit |
 
 Auffrischung zusätzlich alle fünf Minuten.

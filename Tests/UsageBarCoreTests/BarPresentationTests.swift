@@ -306,4 +306,132 @@ struct BarPresentationTests {
         #expect(BarPresentation.filledFraction(-0.2) == 0)
         #expect(BarPresentation.filledFraction(0.5) == 0.5)
     }
+
+    @Test func twoGrokTrackingIDsAreTwoCards() {
+        let a = UsageOutcome.snapshot(UsageSnapshot(
+            provider: .grok,
+            trackingID: "grok:a",
+            limits: [Limit(id: "weekly", label: "Week", utilization: 0.2, resetsAt: nil, locked: .unknown, scope: .account)]
+        ))
+        let b = UsageOutcome.snapshot(UsageSnapshot(
+            provider: .grok,
+            trackingID: "grok:b",
+            limits: [Limit(id: "weekly", label: "Week", utilization: 0.9, resetsAt: nil, locked: .unknown, scope: .account)]
+        ))
+        let cards = BarPresentation.cards(from: [a, b])
+        #expect(cards.map(\.trackingID) == ["grok:a", "grok:b"])
+        #expect(BarPresentation.of(outcomes: [a, b]).segments.count == 2)
+    }
+
+    @Test func hidingALimitDropsItFromThePillTone() {
+        let card = AccountCard(
+            trackingID: "claude:a",
+            provider: .claude,
+            defaultName: "A",
+            limits: [
+                Limit(id: "week", label: "Week", utilization: 0.1, resetsAt: nil, locked: .unknown, scope: .account),
+                Limit(id: "fable", label: "Week · Fable", utilization: 1, resetsAt: nil, locked: .unknown, scope: .model),
+            ],
+            tone: .ok,
+            utilization: 0.1
+        )
+        var prefs = DisplayPreferences()
+        prefs.toggleLimit(trackingID: "claude:a", limitID: "fable")
+        let shown = prefs.applied(to: [card])
+        #expect(shown[0].limits.map(\.id) == ["week"])
+        #expect(shown[0].tone == .ok)
+    }
+
+    @Test func hidingTheWorstAccountLimitRepaintsTheSlot() {
+        let card = AccountCard(
+            trackingID: "claude:a",
+            provider: .claude,
+            defaultName: "A",
+            limits: [
+                Limit(id: "session", label: "5 hours", utilization: 0.1, resetsAt: nil, locked: .unknown, scope: .account),
+                Limit(id: "week", label: "Week", utilization: 1, resetsAt: nil, locked: .unknown, scope: .account),
+            ],
+            tone: .critical,
+            utilization: 1
+        )
+        var prefs = DisplayPreferences()
+        prefs.toggleLimit(trackingID: "claude:a", limitID: "week")
+        let shown = prefs.applied(to: [card])
+        #expect(shown[0].tone == .ok)
+        #expect(shown[0].utilization == 0.1)
+    }
+
+    @Test func hiddenAccountLeavesThePill() {
+        let a = AccountCard(
+            trackingID: "claude:a",
+            provider: .claude,
+            defaultName: "A",
+            limits: [Limit(id: "w", label: "Week", utilization: 0.1, resetsAt: nil, locked: .unknown, scope: .account)],
+            tone: .ok,
+            utilization: 0.1
+        )
+        let b = AccountCard(
+            trackingID: "claude:b",
+            provider: .claude,
+            defaultName: "B",
+            limits: [Limit(id: "w", label: "Week", utilization: 0.9, resetsAt: nil, locked: .unknown, scope: .account)],
+            tone: .critical,
+            utilization: 0.9
+        )
+        var prefs = DisplayPreferences()
+        prefs.toggleAccount("claude:b")
+        #expect(prefs.applied(to: [a, b]).map(\.trackingID) == ["claude:a"])
+    }
+
+    /// `showing` used to pass empty outcomes, so title/tone/worst were idle
+    /// while the cards themselves said two accounts were locked.
+    @Test func showingTakesWorstFromTheCardsRegardlessOfOrder() {
+        let ok = AccountCard(
+            trackingID: "claude:a",
+            provider: .claude,
+            defaultName: "A",
+            limits: [Limit(id: "w", label: "Week", utilization: 0.14, resetsAt: nil, locked: .unknown, scope: .account)],
+            tone: .ok,
+            utilization: 0.14
+        )
+        let locked = AccountCard(
+            trackingID: "chatGPT",
+            provider: .chatGPT,
+            defaultName: "B",
+            limits: [Limit(id: "w", label: "Week", utilization: 1, resetsAt: nil, locked: .locked, scope: .account)],
+            tone: .critical,
+            utilization: 1
+        )
+        for cards in [[ok, locked], [locked, ok]] {
+            let bar = BarPresentation.showing(cards)
+            #expect(bar.title == "100%")
+            #expect(bar.tone == .critical)
+            #expect(bar.worst?.locked == .locked)
+            #expect(bar.provider == .chatGPT)
+            #expect(bar.segments.count == 2)
+        }
+    }
+
+    @Test func accountOrderControlsPopoverAndPill() {
+        let a = AccountCard(
+            trackingID: "claude:a",
+            provider: .claude,
+            defaultName: "A",
+            limits: [Limit(id: "w", label: "Week", utilization: 0.1, resetsAt: nil, locked: .unknown, scope: .account)],
+            tone: .ok,
+            utilization: 0.1
+        )
+        let b = AccountCard(
+            trackingID: "chatGPT",
+            provider: .chatGPT,
+            defaultName: "B",
+            limits: [Limit(id: "w", label: "Week", utilization: 0.2, resetsAt: nil, locked: .unknown, scope: .account)],
+            tone: .ok,
+            utilization: 0.2
+        )
+        var prefs = DisplayPreferences(accountOrder: ["chatGPT", "claude:a"])
+        #expect(prefs.applied(to: [a, b]).map(\.trackingID) == ["chatGPT", "claude:a"])
+        prefs.move(trackingID: "chatGPT", by: 1, among: [a, b])
+        #expect(prefs.accountOrder == ["claude:a", "chatGPT"])
+    }
 }

@@ -25,6 +25,12 @@ enum AccountNames {
         stored()
     }
 
+    /// Copy a custom name onto the new tracking id after a storage upgrade.
+    static func remap(from old: String, to new: String) {
+        guard old != new, let name = stored()[old] else { return }
+        setName(name, for: new)
+    }
+
     private static func stored() -> [String: String] {
         UserDefaults.standard.dictionary(forKey: key) as? [String: String] ?? [:]
     }
