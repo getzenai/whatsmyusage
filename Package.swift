@@ -4,7 +4,7 @@ import PackageDescription
 // ai_usage_bar is a single package:
 //
 //   UsageBarCore — models, cookie extraction, per-provider translators (all testable)
-//   UsageBar     — the menu bar app (assembled into AI Usage Bar.app by
+//   UsageBar     — the menu bar app (assembled into WhatsMyUsage.app by
 //                  Scripts/make-app-bundle.sh; no Xcode project)
 //
 // Everything that can be tested lives in UsageBarCore. The app stays thin so

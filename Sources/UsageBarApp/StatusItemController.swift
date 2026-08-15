@@ -74,7 +74,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     }
 
     private func tooltip(for bar: BarPresentation) -> String {
-        if bar.segments.isEmpty { return "AI Usage Bar" }
+        if bar.segments.isEmpty { return AppIdentity.displayName }
         return bar.segments.map { segment in
             let name = AccountNames.name(for: segment.trackingID, default: segment.name)
             let pct = segment.utilization.map(BarPresentation.percentString) ?? "—"
