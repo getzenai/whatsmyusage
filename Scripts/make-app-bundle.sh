@@ -1,0 +1,68 @@
+#!/bin/bash
+# Assembles "AI Usage Bar.app" from the SwiftPM executable.
+#
+# There is no Xcode project on purpose: SwiftPM produces a bare Mach-O binary,
+# and a menu bar app needs a real .app bundle for LSUIElement (no Dock icon).
+#
+# Usage: Scripts/make-app-bundle.sh [debug|release]   (default: release)
+set -euo pipefail
+
+CONFIGURATION="${1:-release}"
+BUNDLE_ID="de.getzenai.ai-usage-bar"
+APP_NAME="AI Usage Bar"
+PRODUCT_NAME="UsageBar"
+VERSION="0.1.0"
+
+cd "$(dirname "$0")/.."
+REPO_ROOT="$PWD"
+
+echo "==> Building $PRODUCT_NAME ($CONFIGURATION)"
+swift build -c "$CONFIGURATION" --product "$PRODUCT_NAME"
+
+BIN_PATH="$(swift build -c "$CONFIGURATION" --product "$PRODUCT_NAME" --show-bin-path)"
+APP_PATH="$REPO_ROOT/.build/$APP_NAME.app"
+
+echo "==> Assembling $APP_PATH"
+rm -rf "$APP_PATH"
+mkdir -p "$APP_PATH/Contents/MacOS" "$APP_PATH/Contents/Resources"
+cp "$BIN_PATH/$PRODUCT_NAME" "$APP_PATH/Contents/MacOS/$APP_NAME"
+
+cat > "$APP_PATH/Contents/Info.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleExecutable</key>
+    <string>$APP_NAME</string>
+    <key>CFBundleIdentifier</key>
+    <string>$BUNDLE_ID</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>$APP_NAME</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>$VERSION</string>
+    <key>CFBundleVersion</key>
+    <string>$VERSION</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>14.0</string>
+    <key>LSUIElement</key>
+    <true/>
+    <key>NSHumanReadableCopyright</key>
+    <string>MIT</string>
+</dict>
+</plist>
+PLIST
+
+SIGN_IDENTITY="${USAGE_BAR_SIGN_IDENTITY:--}"
+echo "==> Signing with identity: $SIGN_IDENTITY"
+codesign --force --sign "$SIGN_IDENTITY" --timestamp=none "$APP_PATH"
+codesign --verify --verbose=2 "$APP_PATH"
+
+echo
+echo "Built $APP_PATH"
+echo "Run it with:  open \"$APP_PATH\""
