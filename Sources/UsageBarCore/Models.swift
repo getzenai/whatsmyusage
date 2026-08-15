@@ -96,8 +96,9 @@ public struct UsageSnapshot: Equatable, Sendable {
         self.limits = limits
     }
 
-    /// The limit the bar must show: highest utilization among account-scoped limits.
-    /// Model-scoped limits stay out — a full Fable week does not mean the account is full.
+    /// The limit the bar must show: a lock outranks any open number; among equals,
+    /// higher utilization. Model-scoped limits stay out — a full Fable week does
+    /// not mean the account is full.
     public var worstAccountLimit: Limit? {
         limits
             .filter { $0.scope == .account }
@@ -106,14 +107,16 @@ public struct UsageSnapshot: Equatable, Sendable {
 }
 
 extension Limit {
-    /// Lower urgency first. Higher utilization wins; a lock breaks a tie; sooner reset
-    /// breaks a further tie. Used only to pick "the worst" — never to drop a limit.
+    /// Lower urgency first. A lock outranks any open number (`unknown` counts as
+    /// open — the provider did not say blocked). Among the same lock state,
+    /// higher utilization wins; sooner reset breaks a further tie. Used only to
+    /// pick "the worst" — never to drop a limit.
     static func isLessUrgent(_ lhs: Limit, _ rhs: Limit) -> Bool {
-        if lhs.utilization != rhs.utilization {
-            return lhs.utilization < rhs.utilization
-        }
         if lhs.locked != rhs.locked {
             return lhs.locked != .locked && rhs.locked == .locked
+        }
+        if lhs.utilization != rhs.utilization {
+            return lhs.utilization < rhs.utilization
         }
         switch (lhs.resetsAt, rhs.resetsAt) {
         case let (l?, r?):

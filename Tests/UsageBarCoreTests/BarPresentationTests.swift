@@ -41,6 +41,23 @@ struct BarPresentationTests {
         #expect(bar.title == "50%")
     }
 
+    /// Locked ChatGPT at 40% must beat open Claude at 80%. Utilization-first
+    /// ranking hid the lock behind a merely high open number.
+    @Test func lockedProviderBeatsHigherOpenUtilization() {
+        let claude = UsageOutcome.snapshot(UsageSnapshot(provider: .claude, limits: [
+            Limit(id: "weekly_all", label: "Woche", utilization: 0.8, resetsAt: nil, locked: .unknown, scope: .account),
+        ]))
+        let chatGPT = UsageOutcome.snapshot(UsageSnapshot(provider: .chatGPT, limits: [
+            Limit(id: "primary", label: "Woche", utilization: 0.4, resetsAt: nil, locked: .locked, scope: .account),
+        ]))
+
+        let bar = BarPresentation.of(outcomes: [claude, chatGPT])
+        #expect(bar.title == "40%")
+        #expect(bar.tone == .critical)
+        #expect(bar.provider == .chatGPT)
+        #expect(bar.worst?.locked == .locked)
+    }
+
     @Test func expiredDoesNotHideARealReading() {
         let snap = UsageOutcome.snapshot(UsageSnapshot(provider: .grok, limits: [
             Limit(id: "fast", label: "2 Stunden · fast", utilization: 0.1, resetsAt: nil, locked: .unlocked, scope: .account),
