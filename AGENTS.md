@@ -19,8 +19,12 @@ Read `README.md` and `docs/` before changing parsers or cookie handling.
   (`accessToken`). A 200 session body without `accessToken` is expired — not a later
   401 on `wham/usage`.
 - Do not invent a lock state the provider does not send. ChatGPT has `allowed`.
-  Grok has a remaining count of zero. Claude has percentages only — lock stays
-  `unknown`.
+  Grok's 2-hour window locks at remaining zero; the weekly credits call locks
+  only at 100 %. Claude has percentages only — lock stays `unknown`.
+- Grok's weekly limit is `application/grpc-web+proto`, not JSON. JSON encodings
+  return an empty body and `grpc-status: 13`. Status is in the trailer frame
+  (flag `0x80`), never in the HTTP header. Only take the limit when field
+  `1.8.1 == 2` (weekly); any other period type is dropped, not remapped.
 - Do not hardcode limit names the provider invents. Claude's `limits[]` grows
   new `kind` values; unknown ones pass through.
 

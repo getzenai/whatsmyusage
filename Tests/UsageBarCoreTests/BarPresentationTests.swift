@@ -22,6 +22,28 @@ struct BarPresentationTests {
         #expect(bar.provider == .claude)
     }
 
+    @Test func grokWeeklyBeatsEmptyTwoHourWindows() {
+        let windows = UsageOutcome.snapshot(UsageSnapshot(provider: .grok, limits: [
+            Limit(id: "fast", label: "2 Stunden · fast", utilization: 0, resetsAt: nil, locked: .unlocked, scope: .account),
+            Limit(id: "expert", label: "2 Stunden · expert", utilization: 0, resetsAt: nil, locked: .unlocked, scope: .account),
+        ]))
+        let weekly = UsageOutcome.snapshot(UsageSnapshot(provider: .grok, limits: [
+            Limit(
+                id: "weekly",
+                label: "Woche",
+                utilization: 0.37,
+                resetsAt: Date(timeIntervalSince1970: 1_800_000_000),
+                locked: .unknown,
+                scope: .account
+            ),
+        ]))
+        let bar = BarPresentation.of(outcomes: [windows, weekly])
+        #expect(bar.title == "37%")
+        #expect(bar.tone == .ok)
+        #expect(bar.worst?.id == "weekly")
+        #expect(bar.provider == .grok)
+    }
+
     @Test func modelLimitCannotPaintTheBar() {
         let snap = UsageOutcome.snapshot(UsageSnapshot(provider: .claude, limits: [
             Limit(id: "weekly_all", label: "Woche", utilization: 0.2, resetsAt: nil, locked: .unknown, scope: .account),

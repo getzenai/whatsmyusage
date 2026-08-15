@@ -80,6 +80,12 @@ public enum UsageParser {
         ClaudeParser.parseBootstrapData(data)
     }
 
+    /// Grok `GetGrokCreditsConfig`. Nil on any failure — the 2-hour windows
+    /// stay; a silent miss must not paint Grok as "!".
+    public static func parseGrokWeekly(body: Data) -> Limit? {
+        GrokParser.parseWeekly(body)
+    }
+
     /// ChatGPT `/api/auth/session` → bearer for `/backend-api/wham/usage`.
     /// A 200 without `accessToken` is expired. That field is the proof the cookie
     /// still mints a backend token — not a 401 on the usage call, which rejects

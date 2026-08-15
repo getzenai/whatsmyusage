@@ -15,7 +15,7 @@ Konto gesperrt war. Die App muss über alle Limits gehen und das **schlimmste** 
 |---|---|---|
 | Claude | `/api/bootstrap`, `/api/organizations/{id}/usage` | live gemessen, siehe [docs/RESEARCH_CLAUDE_ENDPOINT.md](docs/RESEARCH_CLAUDE_ENDPOINT.md) |
 | ChatGPT | `/api/auth/session` → Bearer → `GET /backend-api/wham/usage` | live gemessen, siehe [docs/RESEARCH_CHATGPT_GROK_ENDPOINTS.md](docs/RESEARCH_CHATGPT_GROK_ENDPOINTS.md) |
-| Grok | `POST /rest/rate-limits` (pro Modell) | live gemessen, siehe [docs/RESEARCH_CHATGPT_GROK_ENDPOINTS.md](docs/RESEARCH_CHATGPT_GROK_ENDPOINTS.md) |
+| Grok | `POST /rest/rate-limits` (2 h, pro Modell) + `GetGrokCreditsConfig` (Woche, grpc-web) | live gemessen, siehe [docs/RESEARCH_GROK_WEEKLY_LIMIT.md](docs/RESEARCH_GROK_WEEKLY_LIMIT.md) |
 
 ## Umgang mit Cookies — verbindlich
 
@@ -67,6 +67,8 @@ Auffrischung zusätzlich alle fünf Minuten.
   (Bezeichnung, Auslastung 0…1, optionale Zurücksetzung, gesperrt ja/nein/**unbekannt**)
 - `UsageParser.chatGPTAccessToken` — `/api/auth/session` → Bearer; fehlt
   `accessToken`, ist die Sitzung abgelaufen
+- `UsageParser.parseGrokWeekly` — grpc-web-Körper → Wochenlimit, nur wenn
+  die Periode `weekly` ist; jeder Fehler ist `nil`, nicht „!"
 - 401 = abgelaufen; 403 auf einer Claude-Org = diese Org ist nicht trackbar;
   403 auf ChatGPT/Grok ist **kein** Logout (Cloudflare)
 

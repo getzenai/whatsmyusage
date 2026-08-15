@@ -22,6 +22,39 @@ enum GrokParser {
         return .snapshot(UsageSnapshot(provider: .grok, accountLabel: accountLabel ?? model, limits: limits))
     }
 
+    /// `GetGrokCreditsConfig` (grpc-web). Only a weekly period (`1.8.1 == 2`)
+    /// becomes a limit; any other period type is dropped, not remapped.
+    ///
+    /// Proto3 omits a numeric field at default 0, so a missing `1.1` after a
+    /// weekly period is 0 %, not "no answer". That case is unread against a
+    /// live 0 % account — it follows the wire rule.
+    static func parseWeekly(_ body: Data) -> Limit? {
+        guard let message = GrpcWeb.dataMessage(from: body),
+              let root = Proto.decode(message),
+              let config = Proto.message(root, 1),
+              let period = Proto.message(config, 8),
+              Proto.varint(period, 1) == 2
+        else { return nil }
+
+        let percent = Proto.float(config, 1) ?? 0
+        guard percent.isFinite else { return nil }
+
+        var resetsAt: Date?
+        if let end = Proto.message(period, 3), let seconds = Proto.varint(end, 1) {
+            let nanos = Proto.varint(end, 2) ?? 0
+            resetsAt = Date(timeIntervalSince1970: Double(seconds) + Double(nanos) / 1_000_000_000)
+        }
+
+        return Limit(
+            id: "weekly",
+            label: "Woche",
+            utilization: Double(percent) / 100,
+            resetsAt: resetsAt,
+            locked: Double(percent) >= 100 ? .locked : .unknown,
+            scope: .account
+        )
+    }
+
     private static func looksLikeWindow(_ obj: [String: Any]) -> Bool {
         obj["remainingQueries"] != nil && obj["totalQueries"] != nil
     }
