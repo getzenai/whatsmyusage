@@ -1,72 +1,72 @@
-# Groks Wochenlimit — live gemessen 2026-08-15
+# Grok's weekly limit — measured live 2026-08-15
 
-`POST /rest/rate-limits` ist **nicht** das Limit, an das ein Grok-Abonnent stößt. Es liefert
-nur ein **2-Stunden-Fenster pro Modell**. Das Limit, das die Grok-Oberfläche unter
-*Settings → Usage* anzeigt — „Weekly SuperGrok … Limit, N % used, Resets <Datum>" — kommt aus
-einer anderen Quelle und kann hoch stehen, während alle 2-h-Fenster auf 0 % sind. Eine Leiste,
-die nur `rest/rate-limits` liest, zeigt für Grok dauerhaft „alles frei".
+`POST /rest/rate-limits` is **not** the limit a Grok subscriber runs into. It only reports a
+**2-hour window per model**. The limit that Grok's own UI shows under *Settings → Usage* —
+"Weekly SuperGrok … Limit, N % used, Resets <date>" — comes from a different source and can sit
+high while every 2 h window reads 0 %. A bar that only reads `rest/rate-limits` will show
+"all clear" for Grok forever.
 
-## Woher die Wochenzahl kommt
+## Where the weekly number comes from
 
 ```
 POST https://grok.com/grok_api_v2.GrokBuildBilling/GetGrokCreditsConfig
 Cookie: sso=<…>
 Content-Type: application/grpc-web+proto
 X-Grpc-Web: 1
-Body: 00 00 00 00 00      (leeres Request-Message, nur der 5-Byte-Rahmen)
+Body: 00 00 00 00 00      (empty request message, just the 5-byte frame)
 ```
 
-Gemessen mit **Swift `URLSession` und nur dem `sso`-Cookie**: HTTP 200,
-`content-type: application/grpc-web+proto`. Kein Bearer, kein `cf_clearance`, kein UA-Spoof.
+Measured with **Swift `URLSession` and the `sso` cookie alone**: HTTP 200,
+`content-type: application/grpc-web+proto`. No bearer, no `cf_clearance`, no UA spoof.
 
-**JSON gibt es nicht.** `application/json`, `application/connect+json` und
-`application/grpc-web+json` antworten alle mit Länge 0 und
-`grpc-status: 13 · Unexpected EOF decoding stream`. Der Dienst spricht ausschließlich Protobuf.
+**There is no JSON.** `application/json`, `application/connect+json` and
+`application/grpc-web+json` all answer with length 0 and
+`grpc-status: 13 · Unexpected EOF decoding stream`. The service speaks protobuf only.
 
-**Der Status steht im Körper, nicht im Header.** Die Antwort ist ein grpc-web-Rahmenpaar:
-Datenrahmen (Flag `0x00`, 4 Byte Länge, Message) gefolgt von einem Trailer-Rahmen
-(Flag `0x80`) mit dem Text `grpc-status:0`. Ein `HTTPURLResponse.value(forHTTPHeaderField:)`
-auf `grpc-status` liefert `nil` — wer darauf prüft, hält jede Antwort für kaputt.
+**The status lives in the body, not the header.** The response is a pair of grpc-web frames: a
+data frame (flag `0x00`, 4-byte length, message) followed by a trailer frame (flag `0x80`)
+carrying the text `grpc-status:0`. An `HTTPURLResponse.value(forHTTPHeaderField:)` on
+`grpc-status` returns `nil` — check that and you will consider every response broken.
 
-## Die Antwort, nach Feldnummern
+## The response, by field number
 
-Ohne `.proto`-Definition reicht ein Wire-Format-Leser; die gebrauchten Felder liegen fest:
+Without a `.proto` definition a wire-format reader is enough; the fields we need are fixed:
 
-| Pfad | Typ | Bedeutung |
+| Path | Type | Meaning |
 |---|---|---|
 | `1` | message | `config` |
-| `1.1` | fixed32 (float) | **Auslastung in Prozent, 0…100** |
-| `1.4` / `1.5` | Timestamp | Abrechnungszeitraum (`seconds`, `nanos`) |
-| `1.7` | message, wiederholt | `productUsage`: `.1` Produkt-Enum, `.2` Prozent dieses Produkts |
-| `1.8.1` | varint | Periodentyp: **2 = weekly**, 1 = monthly |
-| `1.8.2` / `1.8.3` | Timestamp | **Beginn und Ende der laufenden Periode** |
+| `1.1` | fixed32 (float) | **utilization in percent, 0…100** |
+| `1.4` / `1.5` | Timestamp | billing period (`seconds`, `nanos`) |
+| `1.7` | message, repeated | `productUsage`: `.1` product enum, `.2` percent of that product |
+| `1.8.1` | varint | period type: **2 = weekly**, 1 = monthly |
+| `1.8.2` / `1.8.3` | Timestamp | **start and end of the current period** |
 
-`1.8.3` ist damit das, was Grok bisher fehlte: ein echter **Zurücksetzungs-Zeitpunkt**.
-`rest/rate-limits` hat nur eine Fensterlänge.
+`1.8.3` is therefore what Grok had been missing: a real **reset timestamp**.
+`rest/rate-limits` only has a window length.
 
-Die Prozentzahl kommt fertig, wie bei ChatGPT — nichts zu rechnen. Einen Sperrzustand sendet
-der Dienst weiterhin nicht; `locked` bleibt `unknown`, außer die Zahl steht auf 100.
+The percentage arrives ready-made, as with ChatGPT — nothing to compute. The service still does
+not send a lock state; `locked` stays `unknown` unless the number reads 100.
 
-Gegenprobe an der Oberfläche: der Wert in `1.1` ist genau die Zahl, die die Usage-Ansicht als
-„N % used" zeigt, und `1.8.3` genau ihr „Resets …"-Datum.
+Cross-checked against the UI: the value in `1.1` is exactly the number the usage view shows as
+"N % used", and `1.8.3` is exactly its "Resets …" date.
 
-## Was das für die App heißt
+## What this means for the app
 
-Grok braucht **zwei** Aufrufe: `rest/rate-limits` je Modell für das 2-h-Fenster (Kurzfrist) und
-diesen einen für die Woche (Langfrist) — dieselbe Beziehung wie Claudes `five_hour`/`seven_day`.
-Das Wochenlimit ist das kontobezogene; die 2-h-Fenster sind pro Modell.
+Grok needs **two** calls: `rest/rate-limits` per model for the 2 h window (short term) and this
+one for the week (long term) — the same relationship as Claude's `five_hour`/`seven_day`. The
+weekly limit is the account-wide one; the 2 h windows are per model.
 
-Nicht gebraucht, gleiche Kodierung, bewusst draußen: `ConsumerUiSvc/GetRemainingResets`
-(„Reset available"), `GetPrepaidBenefits`, `GrokBuildBilling/ListInvoices`.
+Not needed, same encoding, deliberately left out: `ConsumerUiSvc/GetRemainingResets`
+("Reset available"), `GetPrepaidBenefits`, `GrokBuildBilling/ListInvoices`.
 
-## Methode
+## Method
 
-Gemessen im ferngesteuerten Chrome (siehe `RESEARCH_CHATGPT_GROK_ENDPOINTS.md`, Abschnitt
-„Methode"). Die Zuordnung Zahl → Endpunkt kam nicht aus dem Netzwerkmitschnitt, sondern aus den
-**React-Props des Elements**, das die Zahl zeichnet: der Fiber-Baum über der Prozentanzeige
-trägt das gelieferte Objekt (`usagePercent`, `currentPeriod`, `productUsage`, `tierName`), und
-die passende Umwandlung stand im Chunk daneben. Bei einer Zahl, die aus binärem gRPC kommt,
-findet ein Body-Suchlauf nach der Zahl nichts — der Client weiß, was er gezeichnet hat.
+Measured in remote-controlled Chrome (see `RESEARCH_CHATGPT_GROK_ENDPOINTS.md`, section
+"Method"). Mapping number → endpoint did not come from the network capture but from the
+**React props of the element** that draws the number: the fiber tree above the percentage
+carries the delivered object (`usagePercent`, `currentPeriod`, `productUsage`, `tierName`), and
+the matching conversion sat in the chunk next to it. For a number that arrives as binary gRPC,
+searching the bodies for that number finds nothing — the client knows what it drew.
 
-**Danach erst der Beleg, der zählt:** derselbe Aufruf aus Swift `URLSession` mit nur dem
-Cookie. Ein im Browser gelungener Aufruf beweist die Adresse, nicht die Berechtigung.
+**Only then the evidence that counts:** the same call from Swift `URLSession` with the cookie
+alone. A call that succeeded in the browser proves the address, not the authorization.
