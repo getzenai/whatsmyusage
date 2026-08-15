@@ -63,13 +63,28 @@ struct UsageClient {
             endpoint: .bootstrap
         )
         if case .expired = bootstrapOutcome {
-            return AccountFetch(provider: .claude, accountID: accountID, outcomes: [.expired], claudeOrgIDs: nil)
+            return AccountFetch(
+                provider: .claude,
+                accountID: accountID,
+                outcomes: [retag(bootstrapOutcome, provider: .claude, trackingID: claudeTrackingID(creds, accountID: accountID))],
+                claudeOrgIDs: nil
+            )
         }
         if case .notJSON = bootstrapOutcome {
-            return AccountFetch(provider: .claude, accountID: accountID, outcomes: [.notJSON], claudeOrgIDs: nil)
+            return AccountFetch(
+                provider: .claude,
+                accountID: accountID,
+                outcomes: [retag(bootstrapOutcome, provider: .claude, trackingID: claudeTrackingID(creds, accountID: accountID))],
+                claudeOrgIDs: nil
+            )
         }
         if bootstrap.status != 200 {
-            return AccountFetch(provider: .claude, accountID: accountID, outcomes: [bootstrapOutcome], claudeOrgIDs: nil)
+            return AccountFetch(
+                provider: .claude,
+                accountID: accountID,
+                outcomes: [retag(bootstrapOutcome, provider: .claude, trackingID: claudeTrackingID(creds, accountID: accountID))],
+                claudeOrgIDs: nil
+            )
         }
 
         let orgs = UsageParser.claudeOrganizations(from: bootstrap.body)
@@ -81,7 +96,7 @@ struct UsageClient {
             return AccountFetch(
                 provider: .claude,
                 accountID: accountID,
-                outcomes: [outcome],
+                outcomes: [retag(outcome, provider: .claude, trackingID: claudeTrackingID(creds, accountID: accountID))],
                 claudeOrgIDs: Set(orgs.map(\.id))
             )
         }
@@ -153,7 +168,7 @@ struct UsageClient {
         return AccountFetch(
             provider: .chatGPT,
             accountID: accountID,
-            outcomes: [retag(outcome, trackingID: trackingID)],
+            outcomes: [retag(outcome, provider: .chatGPT, trackingID: trackingID)],
             claudeOrgIDs: nil
         )
     }
@@ -204,19 +219,40 @@ struct UsageClient {
                 trackingID: trackingID,
                 limits: limits
             )))
+        } else if let error = errors.first {
+            // Same tracking id as a live card. A naked `.httpError` would become
+            // the card id `grok` and `owns("grok")` used to match every Grok login.
+            outcomes.append(retag(error, provider: .grok, trackingID: trackingID))
         }
-        outcomes.append(contentsOf: errors.map { retag($0, trackingID: trackingID) })
         return outcomes
     }
 
-    private func retag(_ outcome: UsageOutcome, trackingID: String) -> UsageOutcome {
-        guard case .snapshot(let snap) = outcome else { return outcome }
+    private func claudeTrackingID(_ creds: ClaudeCredentials, accountID: String) -> String {
+        if let org = creds.lastActiveOrg, !org.isEmpty { return "claude:\(org)" }
+        return "claude:account:\(accountID)"
+    }
+
+    private func retag(
+        _ outcome: UsageOutcome,
+        provider: Provider,
+        trackingID: String,
+        accountLabel: String? = nil
+    ) -> UsageOutcome {
+        if case .snapshot(let snap) = outcome {
+            return .snapshot(UsageSnapshot(
+                provider: provider,
+                trackingID: trackingID,
+                accountLabel: accountLabel ?? snap.accountLabel,
+                limits: snap.limits,
+                diagnostic: snap.diagnostic
+            ))
+        }
         return .snapshot(UsageSnapshot(
-            provider: snap.provider,
+            provider: provider,
             trackingID: trackingID,
-            accountLabel: snap.accountLabel,
-            limits: snap.limits,
-            diagnostic: snap.diagnostic
+            accountLabel: accountLabel,
+            limits: [],
+            diagnostic: Self.diagnostic(for: outcome)
         ))
     }
 

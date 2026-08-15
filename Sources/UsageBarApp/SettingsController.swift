@@ -110,8 +110,17 @@ final class SettingsController: NSObject, NSWindowDelegate {
             reorder: { [weak self] source, destination in
                 self?.mutatePrefs { $0.move(from: source, to: destination, among: self?.model.cards ?? []) }
             },
-            deleteAccount: { [weak self] trackingID in
-                self?.deleteAccount(trackingID)
+            requestDelete: { [weak self] trackingID in
+                self?.requestDelete(trackingID)
+            },
+            confirmDelete: { [weak self] in
+                self?.confirmDelete()
+            },
+            cancelDelete: { [weak self] in
+                self?.model.showingDeleteConfirm = false
+                self?.model.pendingDeleteID = nil
+                self?.model.pendingDeleteMessage = ""
+                self?.syncRoot()
             },
             rename: { [weak self] trackingID, name in
                 AccountNames.setName(name, for: trackingID)
@@ -201,12 +210,29 @@ final class SettingsController: NSObject, NSWindowDelegate {
         onSaved?()
     }
 
-    private func deleteAccount(_ trackingID: String) {
+    private func requestDelete(_ trackingID: String) {
+        let store = KeychainStore.load()
+        let deletion = store.deletion(of: trackingID, cards: model.cards) { id, fallback in
+            AccountNames.name(for: id, default: fallback)
+        }
+        model.pendingDeleteID = trackingID
+        model.pendingDeleteMessage = deletion?.message
+            ?? "Removes this login from the Keychain."
+        model.showingDeleteConfirm = true
+        syncRoot()
+    }
+
+    private func confirmDelete() {
+        // Do not clear pendingDeleteID when the alert dismisses — SwiftUI sets
+        // isPresented to false before the destructive button action runs.
+        guard let trackingID = model.pendingDeleteID else { return }
+        model.showingDeleteConfirm = false
+        model.pendingDeleteID = nil
+        model.pendingDeleteMessage = ""
         KeychainStore.remove(trackingID: trackingID)
-        model.cards.removeAll { $0.trackingID == trackingID }
-        // A Claude login can own several org cards.
+        let store = KeychainStore.load()
         model.cards.removeAll { card in
-            !KeychainStore.load().accounts.contains { $0.owns(trackingID: card.trackingID) }
+            !store.accounts.contains { $0.owns(trackingID: card.trackingID) }
         }
         model.success = nil
         model.status = ""
@@ -241,6 +267,9 @@ final class OnboardingModel {
     var cards: [AccountCard] = []
     var advanceAfterRefresh = false
     var prefs = DisplayPreferences()
+    var pendingDeleteID: String?
+    var pendingDeleteMessage: String = ""
+    var showingDeleteConfirm = false
 
     func refreshKeychainSummary() {
         let store = KeychainStore.load()
@@ -268,7 +297,9 @@ struct OnboardingActions {
     var toggleAccount: (String) -> Void
     var moveAccount: (String, Int) -> Void
     var reorder: (IndexSet, Int) -> Void
-    var deleteAccount: (String) -> Void
+    var requestDelete: (String) -> Void
+    var confirmDelete: () -> Void
+    var cancelDelete: () -> Void
     var rename: (String, String) -> Void
     var welcomeContinued: () -> Void
 }
@@ -372,7 +403,7 @@ struct OnboardingRoot: View {
             Text("Here’s what we found")
                 .font(.system(size: 20, weight: .semibold))
                 .foregroundStyle(.primary)
-            Text("We already picked out the relevant cookies for you. Only those session keys are stored in the Keychain; everything else from the paste was thrown away. Drag a row to set the order of the popover and the pill. The eye hides a limit. Trash removes the login.")
+            Text("We already picked out the relevant cookies for you. Only those session keys are stored in the Keychain; everything else from the paste was thrown away. Drag a row to set the order of the popover and the pill. The eye hides a limit. Trash removes the whole login — every organisation that cookie feeds — and asks first.")
                 .font(.system(size: 13))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -400,6 +431,12 @@ struct OnboardingRoot: View {
                 .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
             }
             Spacer(minLength: 0)
+        }
+        .alert("Remove this login?", isPresented: $model.showingDeleteConfirm) {
+            Button("Remove login", role: .destructive, action: actions.confirmDelete)
+            Button("Cancel", role: .cancel, action: actions.cancelDelete)
+        } message: {
+            Text(model.pendingDeleteMessage)
         }
     }
 
@@ -553,7 +590,7 @@ private struct DetectedCard: View {
                     actions.toggleAccount(card.trackingID)
                 }
                 Button {
-                    actions.deleteAccount(card.trackingID)
+                    actions.requestDelete(card.trackingID)
                 } label: {
                     Image(systemName: "trash")
                         .font(.system(size: 12, weight: .medium))
@@ -561,7 +598,7 @@ private struct DetectedCard: View {
                         .frame(width: 22, height: 22)
                 }
                 .buttonStyle(.borderless)
-                .help("Remove this login from the Keychain")
+                .help("Remove the login this card belongs to")
             }
             ForEach(card.limits) { limit in
                 let visible = prefs.isLimitVisible(trackingID: card.trackingID, limitID: limit.id)
