@@ -113,6 +113,18 @@ struct GrokParserTests {
         #expect(UsageParser.parseGrokWeekly(body: GrpcWeb.encode(message: payload)) == nil)
         #expect(Proto.decode(payload) == nil)
     }
+
+    /// Proto3 drops a numeric field at 0. Period present and weekly means the
+    /// provider answered — missing 1.1 is 0 %, not "no weekly limit".
+    /// Code reading + proto3 rule, not a live 0 % account.
+    @Test func omittedPercentOnWeeklyPeriodIsZero() throws {
+        let body = GrokWeeklyWire.frameOmittingPercent(period: 2, resetSeconds: 1_800_000_000)
+        let limit = try #require(UsageParser.parseGrokWeekly(body: body))
+        #expect(limit.id == "weekly")
+        #expect(limit.utilization == 0)
+        #expect(limit.locked == .unknown)
+        #expect(limit.resetsAt == Date(timeIntervalSince1970: 1_800_000_000))
+    }
 }
 
 /// Builds placeholder GetGrokCreditsConfig bodies. Values are invented.
@@ -121,6 +133,14 @@ private enum GrokWeeklyWire {
         let timestamp = field(1, varint: resetSeconds)
         let currentPeriod = field(1, varint: period) + field(3, message: timestamp)
         let config = field(1, float: percent) + field(8, message: currentPeriod)
+        return GrpcWeb.encode(message: field(1, message: config))
+    }
+
+    /// Weekly period present, percent field absent — the proto3 default-0 wire.
+    static func frameOmittingPercent(period: UInt64, resetSeconds: UInt64) -> Data {
+        let timestamp = field(1, varint: resetSeconds)
+        let currentPeriod = field(1, varint: period) + field(3, message: timestamp)
+        let config = field(8, message: currentPeriod)
         return GrpcWeb.encode(message: field(1, message: config))
     }
 
