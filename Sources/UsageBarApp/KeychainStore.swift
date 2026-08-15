@@ -30,6 +30,7 @@ enum KeychainStore {
         var chatGPTAssembled: String?
         var chatGPTAccountID: String?
         var grokSSO: String?
+        var claudeOrgIDs: [String]?
     }
 
     static func load() -> CredentialStore {
@@ -54,10 +55,15 @@ enum KeychainStore {
     }
 
     static func recordClaudeOrgs(_ orgIDsByAccountID: [String: Set<String>]) {
-        let collapsed = CredentialMerge.collapsingClaudeDuplicates(load(), orgIDsByAccountID: orgIDsByAccountID)
+        let stamped = load().stampingClaudeOrgs(orgIDsByAccountID)
+        let collapsed = CredentialMerge.collapsingClaudeDuplicates(stamped, orgIDsByAccountID: orgIDsByAccountID)
         if collapsed != load() {
             replace(collapsed)
         }
+    }
+
+    static func remove(trackingID: String) {
+        replace(load().removing(trackingID: trackingID))
     }
 
     private struct Decoded {
@@ -129,6 +135,9 @@ enum KeychainStore {
         if let sso = stored.grokSSO {
             account.grok = GrokCredentials(sso: sso)
         }
+        if let orgs = stored.claudeOrgIDs {
+            account.claudeOrgIDs = Set(orgs)
+        }
         if account.claude == nil && account.chatGPT == nil && account.grok == nil {
             return nil
         }
@@ -145,7 +154,8 @@ enum KeychainStore {
                     chatGPTParts: account.chatGPT?.parts.map { Stored.Part(index: $0.index, value: $0.value) },
                     chatGPTAssembled: account.chatGPT?.assembled,
                     chatGPTAccountID: account.chatGPT?.accountID,
-                    grokSSO: account.grok?.sso
+                    grokSSO: account.grok?.sso,
+                    claudeOrgIDs: account.claudeOrgIDs.isEmpty ? nil : Array(account.claudeOrgIDs).sorted()
                 )
             }
         )

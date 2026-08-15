@@ -162,6 +162,24 @@ struct CredentialMergeTests {
         #expect(collapsed.accounts.map(\.id) == ["new"])
     }
 
+    @Test func removingAChatGPTTrackingIDDropsThatLogin() {
+        let gpt = CredentialAccount(id: "gpt-1", chatGPT: gptA)
+        let claude = CredentialAccount(id: "c-1", claude: claudeA)
+        let store = CredentialStore(accounts: [gpt, claude]).removing(trackingID: "chatgpt:gpt-1")
+        #expect(store.accounts.map(\.id) == ["c-1"])
+    }
+
+    @Test func removingAClaudeOrgDropsTheLoginThatOwnsIt() {
+        let claude = CredentialAccount(
+            id: "c-1",
+            claude: claudeA,
+            claudeOrgIDs: ["00000000-0000-4000-8000-000000000002"]
+        )
+        let store = CredentialStore(accounts: [claude])
+            .removing(trackingID: "claude:00000000-0000-4000-8000-000000000002")
+        #expect(store.isEmpty)
+    }
+
     @Test func collapsingLeavesDisjointClaudeOrgsAlone() {
         let a = CredentialAccount(id: "a", claude: claudeA)
         let b = CredentialAccount(id: "b", claude: claudeB)

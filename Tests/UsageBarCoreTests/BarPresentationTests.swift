@@ -433,5 +433,7 @@ struct BarPresentationTests {
         #expect(prefs.applied(to: [a, b]).map(\.trackingID) == ["chatGPT", "claude:a"])
         prefs.move(trackingID: "chatGPT", by: 1, among: [a, b])
         #expect(prefs.accountOrder == ["claude:a", "chatGPT"])
+        prefs.move(from: IndexSet(integer: 0), to: 2, among: [a, b])
+        #expect(prefs.accountOrder == ["chatGPT", "claude:a"])
     }
 }

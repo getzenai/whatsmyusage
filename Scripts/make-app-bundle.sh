@@ -16,6 +16,10 @@ BUNDLE_ID="de.getzenai.ai-usage-bar"
 APP_NAME="AI Usage Bar"
 PRODUCT_NAME="UsageBar"
 VERSION="0.1.0"
+BUILD="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+if ! git diff --quiet HEAD -- 2>/dev/null; then
+    BUILD="${BUILD}-dirty"
+fi
 
 cd "$(dirname "$0")/.."
 REPO_ROOT="$PWD"
@@ -51,7 +55,7 @@ cat > "$APP_PATH/Contents/Info.plist" <<PLIST
     <key>CFBundleShortVersionString</key>
     <string>$VERSION</string>
     <key>CFBundleVersion</key>
-    <string>$VERSION</string>
+    <string>$BUILD</string>
     <key>LSMinimumSystemVersion</key>
     <string>14.0</string>
     <key>LSUIElement</key>
@@ -69,5 +73,5 @@ codesign --verify --verbose=2 "$APP_PATH"
 codesign -d -r- "$APP_PATH" 2>&1 | sed -n 's/^.*designated => /designated => /p'
 
 echo
-echo "Built $APP_PATH"
+echo "Built $APP_PATH ($VERSION · $BUILD)"
 echo "Run it with:  open \"$APP_PATH\""

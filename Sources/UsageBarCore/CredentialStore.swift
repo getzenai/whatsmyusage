@@ -7,17 +7,33 @@ public struct CredentialAccount: Equatable, Sendable, Identifiable {
     public var claude: ClaudeCredentials?
     public var chatGPT: ChatGPTCredentials?
     public var grok: GrokCredentials?
+    /// Org UUIDs last seen on this Claude login. Used to delete the right cookie
+    /// when the card's tracking id is `claude:{org}`.
+    public var claudeOrgIDs: Set<String>
 
     public init(
         id: String,
         claude: ClaudeCredentials? = nil,
         chatGPT: ChatGPTCredentials? = nil,
-        grok: GrokCredentials? = nil
+        grok: GrokCredentials? = nil,
+        claudeOrgIDs: Set<String> = []
     ) {
         self.id = id
         self.claude = claude
         self.chatGPT = chatGPT
         self.grok = grok
+        self.claudeOrgIDs = claudeOrgIDs
+    }
+
+    public func owns(trackingID: String) -> Bool {
+        if trackingID == "chatgpt:\(id)" || trackingID == "grok:\(id)" { return true }
+        if chatGPT != nil && (trackingID == "chatGPT" || trackingID == Provider.chatGPT.rawValue) {
+            return true
+        }
+        if grok != nil && trackingID == "grok" { return true }
+        guard trackingID.hasPrefix("claude:") else { return false }
+        let org = String(trackingID.dropFirst("claude:".count))
+        return claude?.lastActiveOrg == org || claudeOrgIDs.contains(org)
     }
 
     public var provider: Provider {
@@ -43,6 +59,19 @@ public struct CredentialStore: Equatable, Sendable {
     }
 
     public var isEmpty: Bool { accounts.isEmpty }
+
+    public func removing(trackingID: String) -> CredentialStore {
+        CredentialStore(accounts: accounts.filter { !$0.owns(trackingID: trackingID) })
+    }
+
+    public func stampingClaudeOrgs(_ orgIDsByAccountID: [String: Set<String>]) -> CredentialStore {
+        CredentialStore(accounts: accounts.map { account in
+            guard let orgs = orgIDsByAccountID[account.id], !orgs.isEmpty else { return account }
+            var next = account
+            next.claudeOrgIDs = orgs
+            return next
+        })
+    }
 }
 
 /// Decide whether a newly pasted cookie is a new login or a refresh of one
