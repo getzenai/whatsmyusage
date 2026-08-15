@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var inflight: Task<Void, Never>?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        installEditMenu()
         let controller = StatusItemController()
         controller.onRefresh = { [weak self] in self?.refresh() }
         controller.onOpenSettings = { [weak self] in self?.settings.show() }
@@ -27,6 +28,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if KeychainStore.load().isEmpty {
             settings.show()
         }
+    }
+
+    /// Accessory apps have no default Edit menu, so ⌘V never reaches a text view.
+    private func installEditMenu() {
+        let main = NSMenu()
+        let appItem = NSMenuItem()
+        main.addItem(appItem)
+        let appMenu = NSMenu()
+        appMenu.addItem(withTitle: "Quit AI Usage Bar", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appItem.submenu = appMenu
+
+        let editItem = NSMenuItem()
+        main.addItem(editItem)
+        let edit = NSMenu(title: "Edit")
+        edit.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        edit.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        edit.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        edit.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        editItem.submenu = edit
+        NSApp.mainMenu = main
     }
 
     private func refresh() {

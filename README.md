@@ -42,18 +42,19 @@ Scripts/make-app-bundle.sh        # → .build/AI Usage Bar.app
 open ".build/AI Usage Bar.app"
 ```
 
-Die App ist ein Menüleisten-Accessory (kein Dock-Icon). Beim ersten Start öffnet sich
-das Cookie-Fenster. Ein Paste aus dem Safari-Cookie-Reiter reicht; erkannte Schlüssel
-wandern in die Keychain, der Rohtext nicht.
+The app is a menu bar accessory (no Dock icon). UI is English. On first launch the
+cookie window opens. Chrome: log in → right-click Inspect / ⌥⌘I → Application →
+Storage → Cookies → the site (claude.ai and a.claude.ai are separate) → ⌘A ⌘C.
+Paste in the window. Only the keys go into the Keychain, not the raw text.
 
 Die Leiste zeigt das **schlimmste account-weite Limit** über alle Anbieter. Ein volles
 Modell-Limit (z. B. nur ein Claude-Modell) färbt die Leiste nicht — das steht im Menü.
 
-| Tastatur | Aktion |
+| Key | Action |
 |---|---|
-| ⌘R | aktualisieren |
+| ⌘R | Refresh |
 | ⌘, | Cookies |
-| ⌘Q | beenden |
+| ⌘Q | Quit |
 
 Auffrischung zusätzlich alle fünf Minuten.
 

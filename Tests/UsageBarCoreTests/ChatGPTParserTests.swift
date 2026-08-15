@@ -26,7 +26,7 @@ struct ChatGPTParserTests {
         #expect(limit.id == "primary")
         #expect(limit.utilization == 1)
         #expect(limit.locked == .locked)
-        #expect(limit.label == "Woche")
+        #expect(limit.label == "Week")
         #expect(limit.scope == .account)
         #expect(snap.accountLabel == "team")
         #expect(limit.resetsAt == Date(timeIntervalSince1970: 1_787_043_909))
@@ -38,7 +38,7 @@ struct ChatGPTParserTests {
         #expect(snap.limits.map(\.locked) == [.unlocked, .unlocked])
         #expect(snap.worstAccountLimit?.id == "secondary")
         #expect(snap.worstAccountLimit?.utilization == 0.40)
-        #expect(snap.limits.first { $0.id == "primary" }?.label == "3 Stunden")
+        #expect(snap.limits.first { $0.id == "primary" }?.label == "3 hours")
     }
 
     @Test func missingAllowedStaysUnknown() throws {

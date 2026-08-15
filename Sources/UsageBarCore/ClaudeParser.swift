@@ -137,11 +137,11 @@ enum ClaudeParser {
     private static func displayName(forKind kind: String, model: String?) -> String {
         let base: String
         switch kind {
-        case "session", "five_hour": base = "5 Stunden"
-        case "weekly_all", "seven_day", "weekly": base = "Woche"
-        case "weekly_scoped": base = "Woche"
-        case "seven_day_sonnet": return "Woche · Sonnet"
-        case "seven_day_opus": return "Woche · Opus"
+        case "session", "five_hour": base = "5 hours"
+        case "weekly_all", "seven_day", "weekly": base = "Week"
+        case "weekly_scoped": base = "Week"
+        case "seven_day_sonnet": return "Week · Sonnet"
+        case "seven_day_opus": return "Week · Opus"
         default: base = kind.replacingOccurrences(of: "_", with: " ")
         }
         return model.map { "\(base) · \($0)" } ?? base

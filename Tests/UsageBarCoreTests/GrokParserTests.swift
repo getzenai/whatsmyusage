@@ -30,7 +30,7 @@ struct GrokParserTests {
         let limit = try #require(snap.limits.first)
         #expect(limit.utilization == 0)
         #expect(limit.locked == .unlocked)
-        #expect(limit.label == "2 Stunden · fast")
+        #expect(limit.label == "2 hours · fast")
         #expect(limit.resetsAt == nil)
         #expect(limit.id == "fast")
     }
@@ -50,7 +50,7 @@ struct GrokParserTests {
     @Test func modelNameIsNotHardcoded() throws {
         let snap = try snapshot(Fixtures.grokUnused, model: "expert")
         #expect(snap.limits.first?.id == "expert")
-        #expect(snap.limits.first?.label == "2 Stunden · expert")
+        #expect(snap.limits.first?.label == "2 hours · expert")
     }
 
     @Test func nestedWindowsArePickedUpByShape() throws {
@@ -79,7 +79,7 @@ struct GrokParserTests {
         )
         let limit = try #require(UsageParser.parseGrokWeekly(body: body))
         #expect(limit.id == "weekly")
-        #expect(limit.label == "Woche")
+        #expect(limit.label == "Week")
         #expect(limit.scope == .account)
         #expect(limit.locked == .unknown)
         #expect(abs(limit.utilization - 0.375) < 0.0001)
