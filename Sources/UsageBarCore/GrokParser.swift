@@ -22,6 +22,34 @@ enum GrokParser {
         return .snapshot(UsageSnapshot(provider: .grok, accountLabel: accountLabel ?? model, limits: limits))
     }
 
+    /// `GetGrokCreditsConfig` (grpc-web). Only a weekly period (`1.8.1 == 2`)
+    /// becomes a limit; any other period type is dropped, not remapped.
+    static func parseWeekly(_ body: Data) -> Limit? {
+        guard let message = GrpcWeb.dataMessage(from: body),
+              let root = Proto.decode(message),
+              let config = Proto.message(root, 1),
+              let period = Proto.message(config, 8),
+              Proto.varint(period, 1) == 2,
+              let percent = Proto.float(config, 1),
+              percent.isFinite
+        else { return nil }
+
+        var resetsAt: Date?
+        if let end = Proto.message(period, 3), let seconds = Proto.varint(end, 1) {
+            let nanos = Proto.varint(end, 2) ?? 0
+            resetsAt = Date(timeIntervalSince1970: Double(seconds) + Double(nanos) / 1_000_000_000)
+        }
+
+        return Limit(
+            id: "weekly",
+            label: "Woche",
+            utilization: Double(percent) / 100,
+            resetsAt: resetsAt,
+            locked: Double(percent) >= 100 ? .locked : .unknown,
+            scope: .account
+        )
+    }
+
     private static func looksLikeWindow(_ obj: [String: Any]) -> Bool {
         obj["remainingQueries"] != nil && obj["totalQueries"] != nil
     }

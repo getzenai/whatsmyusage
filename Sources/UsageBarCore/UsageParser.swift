@@ -84,6 +84,12 @@ public enum UsageParser {
     /// A 200 without `accessToken` is expired. That field is the proof the cookie
     /// still mints a backend token — not a 401 on the usage call, which rejects
     /// cookies even when the session is live.
+    /// Grok `GetGrokCreditsConfig`. Nil on any failure — the 2-hour windows
+    /// stay; a silent miss must not paint Grok as "!".
+    public static func parseGrokWeekly(body: Data) -> Limit? {
+        GrokParser.parseWeekly(body)
+    }
+
     public static func chatGPTAccessToken(statusCode: Int, body: Data) -> ChatGPTAuth {
         if statusCode == 401 { return .failed(.expired) }
         guard statusCode == 200 else { return .failed(.httpError(status: statusCode)) }

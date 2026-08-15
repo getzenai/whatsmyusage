@@ -124,6 +124,15 @@ struct UsageClient {
                 context: ParseContext(grokModel: model)
             ))
         }
+        // Weekly is a separate call. If it fails, keep the 2-hour windows —
+        // do not turn the whole provider into "!".
+        let weekly = await postGrpcWeb(
+            url: URL(string: "https://grok.com/grok_api_v2.GrokBuildBilling/GetGrokCreditsConfig")!,
+            cookie: creds.cookieHeader
+        )
+        if weekly.status == 200, let limit = UsageParser.parseGrokWeekly(body: weekly.body) {
+            outcomes.append(.snapshot(UsageSnapshot(provider: .grok, limits: [limit])))
+        }
         return outcomes
     }
 
@@ -150,6 +159,17 @@ struct UsageClient {
         request.setValue(cookie, forHTTPHeaderField: "Cookie")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = json
+        return await send(request)
+    }
+
+    private func postGrpcWeb(url: URL, cookie: String) async -> HTTPResponse {
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue(cookie, forHTTPHeaderField: "Cookie")
+        request.setValue("application/grpc-web+proto", forHTTPHeaderField: "Content-Type")
+        request.setValue("1", forHTTPHeaderField: "X-Grpc-Web")
+        // Empty protobuf message: data flag + 4-byte zero length. Measured.
+        request.httpBody = Data([0x00, 0x00, 0x00, 0x00, 0x00])
         return await send(request)
     }
 
