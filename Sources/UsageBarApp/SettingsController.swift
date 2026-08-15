@@ -61,8 +61,8 @@ final class SettingsController: NSObject, NSWindowDelegate {
         self.window = window
     }
 
-    func didRefresh(outcomes: [UsageOutcome]) {
-        model.cards = BarPresentation.cards(from: outcomes)
+    func didRefresh(byProvider: [Provider: [UsageOutcome]]) {
+        model.cards = BarPresentation.cards(byProvider: byProvider)
         if model.advanceAfterRefresh {
             model.advanceAfterRefresh = false
             model.step = model.cards.isEmpty ? .paste : .detected
@@ -384,6 +384,7 @@ private struct DetectedCard: View {
     let card: AccountCard
     @State private var draft: String = ""
     @State private var editing = false
+    @FocusState private var nameFocused: Bool
 
     private var displayName: String {
         AccountNames.name(for: card.trackingID, default: card.defaultName)
@@ -395,7 +396,13 @@ private struct DetectedCard: View {
                 if editing {
                     TextField("Name", text: $draft)
                         .textFieldStyle(.roundedBorder)
+                        .focused($nameFocused)
                         .onSubmit { commit() }
+                        .onChange(of: nameFocused) { _, focused in
+                            if !focused { commit() }
+                        }
+                        .onDisappear { commit() }
+                        .onAppear { nameFocused = true }
                 } else {
                     Text(displayName)
                         .font(.system(size: 13, weight: .semibold))
@@ -431,7 +438,9 @@ private struct DetectedCard: View {
     }
 
     private func commit() {
+        guard editing else { return }
         editing = false
+        nameFocused = false
         AccountNames.setName(draft, for: card.trackingID)
     }
 }

@@ -77,7 +77,15 @@ struct UsageClient {
                     limits: unique
                 )))
             } else {
-                outcomes.append(outcome)
+                // Keep the org visible. Dropping this row is the same class of
+                // bug as a silent 0 %: the healthy sibling would hide the failure.
+                outcomes.append(.snapshot(UsageSnapshot(
+                    provider: .claude,
+                    trackingID: "claude:\(org.id)",
+                    accountLabel: org.name,
+                    limits: [],
+                    diagnostic: Self.diagnostic(for: outcome)
+                )))
             }
         }
         return outcomes
@@ -187,6 +195,23 @@ struct UsageClient {
         // Empty protobuf message: data flag + 4-byte zero length. Measured.
         request.httpBody = Data([0x00, 0x00, 0x00, 0x00, 0x00])
         return await send(request)
+    }
+
+    private static func diagnostic(for outcome: UsageOutcome) -> String {
+        switch outcome {
+        case .expired:
+            return "Sign-in expired"
+        case .notTrackable(let message):
+            return "Not trackable: \(message)"
+        case .httpError(let status):
+            return status < 0 ? "Network error" : "HTTP \(status)"
+        case .notJSON:
+            return "Response was not JSON"
+        case .empty:
+            return "No limits in the response"
+        case .snapshot:
+            return "Unknown error"
+        }
     }
 
     private func send(_ request: URLRequest) async -> HTTPResponse {

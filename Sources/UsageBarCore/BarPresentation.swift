@@ -148,6 +148,11 @@ public struct BarPresentation: Equatable, Sendable {
                 return nil
             }
 
+            let failures = outcomes.filter { outcome in
+                if case .snapshot = outcome { return false }
+                return true
+            }
+
             if provider == .grok {
                 let limits = snapshots.flatMap(\.limits)
                 if !limits.isEmpty {
@@ -158,22 +163,29 @@ public struct BarPresentation: Equatable, Sendable {
                         name: name,
                         limits: limits
                     ))
-                    continue
                 }
-            } else if !snapshots.isEmpty {
                 for snap in snapshots {
-                    result.append(liveCard(
-                        trackingID: snap.trackingID,
-                        provider: snap.provider,
-                        name: snap.accountLabel ?? snap.provider.displayName,
-                        limits: snap.limits
-                    ))
+                    if let card = diagnosticCard(snap) {
+                        result.append(card)
+                    }
                 }
-                continue
+            } else {
+                for snap in snapshots {
+                    if let card = diagnosticCard(snap) {
+                        result.append(card)
+                    } else {
+                        result.append(liveCard(
+                            trackingID: snap.trackingID,
+                            provider: snap.provider,
+                            name: snap.accountLabel ?? snap.provider.displayName,
+                            limits: snap.limits
+                        ))
+                    }
+                }
             }
 
-            if let failed = failureCard(provider: provider, outcomes: outcomes) {
-                result.append(failed)
+            if let failed = failureCard(provider: provider, outcomes: failures) {
+                result.append(uniqued(failed, among: result))
             }
         }
         return result
@@ -241,11 +253,43 @@ public struct BarPresentation: Equatable, Sendable {
         return "\(pct)%"
     }
 
+    /// Fill fraction for a bar. Extra credit above 100 % must not paint past the track.
+    public static func filledFraction(_ utilization: Double) -> Double {
+        min(1, max(0, utilization))
+    }
+
     public static func tone(of limit: Limit) -> BarTone {
         if limit.locked == .locked { return .critical }
         if limit.utilization >= 0.9 { return .critical }
         if limit.utilization >= 0.7 { return .warning }
         return .ok
+    }
+
+    private static func diagnosticCard(_ snap: UsageSnapshot) -> AccountCard? {
+        guard let diagnostic = snap.diagnostic, snap.limits.isEmpty else { return nil }
+        let expired = diagnostic == "Sign-in expired"
+        return AccountCard(
+            trackingID: snap.trackingID,
+            provider: snap.provider,
+            defaultName: snap.accountLabel ?? snap.provider.displayName,
+            limits: [],
+            tone: expired ? .expired : .error,
+            utilization: nil,
+            message: diagnostic
+        )
+    }
+
+    private static func uniqued(_ card: AccountCard, among existing: [AccountCard]) -> AccountCard {
+        guard existing.contains(where: { $0.trackingID == card.trackingID }) else { return card }
+        return AccountCard(
+            trackingID: card.trackingID + ":error",
+            provider: card.provider,
+            defaultName: card.defaultName,
+            limits: card.limits,
+            tone: card.tone,
+            utilization: card.utilization,
+            message: card.message
+        )
     }
 
     private static func liveCard(

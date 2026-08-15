@@ -46,6 +46,7 @@ private struct AccountCardView: View {
 
     @State private var editing = false
     @State private var draft = ""
+    @FocusState private var nameFocused: Bool
 
     private var displayName: String {
         AccountNames.name(for: card.trackingID, default: card.defaultName)
@@ -59,7 +60,13 @@ private struct AccountCardView: View {
                         .textFieldStyle(.plain)
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(.primary)
+                        .focused($nameFocused)
                         .onSubmit { commit() }
+                        .onChange(of: nameFocused) { _, focused in
+                            if !focused { commit() }
+                        }
+                        .onDisappear { commit() }
+                        .onAppear { nameFocused = true }
                 } else {
                     Text(displayName)
                         .font(.system(size: 13, weight: .semibold))
@@ -93,7 +100,9 @@ private struct AccountCardView: View {
     }
 
     private func commit() {
+        guard editing else { return }
         editing = false
+        nameFocused = false
         onRename(card.trackingID, draft)
     }
 }
@@ -124,7 +133,7 @@ private struct LimitRow: View {
                         .fill(Color.primary.opacity(0.12))
                     Capsule()
                         .fill(barColor)
-                        .frame(width: max(4, geo.size.width * limit.utilization))
+                        .frame(width: max(4, geo.size.width * BarPresentation.filledFraction(limit.utilization)))
                 }
             }
             .frame(height: 5)

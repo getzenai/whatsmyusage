@@ -104,17 +104,22 @@ public struct UsageSnapshot: Equatable, Sendable {
     /// Local display only (org name, plan). Never logged or committed.
     public let accountLabel: String?
     public let limits: [Limit]
+    /// Set when this tracking failed but a sibling from the same provider lived.
+    /// Empty limits plus a diagnostic must still produce a card — silence looks like health.
+    public let diagnostic: String?
 
     public init(
         provider: Provider,
         trackingID: String? = nil,
         accountLabel: String? = nil,
-        limits: [Limit]
+        limits: [Limit],
+        diagnostic: String? = nil
     ) {
         self.provider = provider
         self.trackingID = trackingID ?? provider.rawValue
         self.accountLabel = accountLabel
         self.limits = limits
+        self.diagnostic = diagnostic
     }
 
     /// The limit the bar must show: a lock outranks any open number; among equals,

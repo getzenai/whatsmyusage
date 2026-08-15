@@ -250,4 +250,60 @@ struct BarPresentationTests {
         #expect(tagged.id == "org-1/session")
         #expect(tagged.label == "5 hours")
     }
+
+    /// A living org must not erase a dead sibling. Silence here looks like
+    /// "that org is fine" — the same class of bug as a bar that shows 0 %.
+    @Test func siblingFailureDoesNotVanishWhenAnotherOrgLives() {
+        let live = UsageOutcome.snapshot(UsageSnapshot(
+            provider: .claude,
+            trackingID: "claude:a",
+            accountLabel: "Zen",
+            limits: [Limit(id: "w", label: "Week", utilization: 0.1, resetsAt: nil, locked: .unknown, scope: .account)]
+        ))
+        let cards = BarPresentation.cards(byProvider: [
+            .claude: [live, .notTrackable(message: "permission_error")],
+        ])
+        #expect(cards.count == 2)
+        #expect(cards.contains { $0.trackingID == "claude:a" && $0.tone == .ok })
+        #expect(cards.contains { $0.tone == .error && $0.message?.contains("permission_error") == true })
+    }
+
+    @Test func failedOrgKeepsItsName() {
+        let live = UsageSnapshot(
+            provider: .claude,
+            trackingID: "claude:a",
+            accountLabel: "Zen",
+            limits: [Limit(id: "w", label: "Week", utilization: 0.1, resetsAt: nil, locked: .unknown, scope: .account)]
+        )
+        let dead = UsageSnapshot(
+            provider: .claude,
+            trackingID: "claude:b",
+            accountLabel: "Max-Org",
+            limits: [],
+            diagnostic: "Not trackable: permission_error"
+        )
+        let cards = BarPresentation.cards(from: [.snapshot(live), .snapshot(dead)])
+        let failed = cards.first { $0.trackingID == "claude:b" }
+        #expect(cards.count == 2)
+        #expect(failed?.defaultName == "Max-Org")
+        #expect(failed?.tone == .error)
+        #expect(failed?.message == "Not trackable: permission_error")
+    }
+
+    @Test func grokWindowErrorDoesNotHideTheWeeklyCard() {
+        let weekly = UsageOutcome.snapshot(UsageSnapshot(provider: .grok, limits: [
+            Limit(id: "weekly", label: "Week", utilization: 0.22, resetsAt: nil, locked: .unknown, scope: .account),
+        ]))
+        let cards = BarPresentation.cards(byProvider: [
+            .grok: [weekly, .httpError(status: 403)],
+        ])
+        #expect(cards.contains { $0.trackingID == "grok" && $0.tone == .ok })
+        #expect(cards.contains { $0.trackingID == "grok:error" && $0.tone == .error })
+    }
+
+    @Test func filledFractionDoesNotPaintPastTheTrack() {
+        #expect(BarPresentation.filledFraction(1.4) == 1)
+        #expect(BarPresentation.filledFraction(-0.2) == 0)
+        #expect(BarPresentation.filledFraction(0.5) == 0.5)
+    }
 }

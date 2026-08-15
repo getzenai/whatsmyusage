@@ -61,14 +61,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let creds = KeychainStore.load()
             if creds.isEmpty {
                 self.statusItem?.update(outcomes: [])
-                self.settings.didRefresh(outcomes: [])
+                self.settings.didRefresh(byProvider: [:])
                 return
             }
             let byProvider = await self.client.refresh(using: creds)
             if Task.isCancelled { return }
             self.statusItem?.update(byProvider: byProvider)
-            let outcomes = Provider.allCases.flatMap { byProvider[$0] ?? [] }
-            self.settings.didRefresh(outcomes: outcomes)
+            self.settings.didRefresh(byProvider: byProvider)
         }
     }
 }
