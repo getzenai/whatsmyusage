@@ -5,10 +5,25 @@ Gemessen durch Mitschnitt des echten Browserverkehrs (Chrome DevTools Protocol, 
 
 ## ChatGPT
 
-**Der Endpunkt ist `GET https://chatgpt.com/backend-api/wham/usage`.**
+**Der Endpunkt ist `GET https://chatgpt.com/backend-api/wham/usage` — aber Cookies allein
+reichen nicht.** Es sind zwei Schritte:
 
-Die Usage-Ansicht ist eine reine Client-Route (`chatgpt.com/#settings/Usage`) — der Server sieht
-sie nie. Beim Aufbau der Seite laufen ~50 Aufrufe unter `/backend-api/`; nur einer trägt die
+1. `GET https://chatgpt.com/api/auth/session` mit den `session-token`-Cookies → Feld `accessToken`
+2. `GET /backend-api/wham/usage` mit **`Authorization: Bearer <accessToken>`** (die Cookies dürfen
+   mitgehen, tragen aber nicht)
+
+**Ohne den Bearer antwortet `/backend-api/` mit 401 — auch mit dem vollständigen Cookie-Satz.**
+Live gemessen: Token allein 401, Token + `__Secure-oai-is` 401, Token + `cf_clearance` 401,
+**alle 22 Cookies der Domain** 401; mit Bearer 200. Für Schritt 1 genügen die beiden
+`__Secure-next-auth.session-token.N`.
+
+Das ist die Falle dieser Messmethode: der Browser hängt den `Authorization`-Header selbst an, und
+ein Mitschnitt, der bewusst keine Header aufzeichnet, sieht davon nichts. **Ein aufgezeichneter
+Aufruf beweist die Adresse, nicht die Berechtigung.** Wer hier nur die URL übernimmt, baut ein
+Tracking, das dauerhaft „abgelaufen" anzeigt, obwohl die Anmeldung einwandfrei ist.
+
+Die Usage-Ansicht selbst ist eine reine Client-Route (`chatgpt.com/#settings/Usage`) — der Server
+sieht sie nie. Beim Aufbau der Seite laufen ~50 Aufrufe unter `/backend-api/`; nur einer trägt die
 Zahlen.
 
 ```json
