@@ -107,14 +107,16 @@ public struct UsageSnapshot: Equatable, Sendable {
 }
 
 extension Limit {
-    /// Lower urgency first. A lock outranks any open number (`unknown` counts as
-    /// open — the provider did not say blocked). Among the same lock state,
+    /// Lower urgency first. Only `.locked` is urgent as a lock — `.unknown` and
+    /// `.unlocked` share one rank ("no evidence of blocked"). Comparing the
+    /// enum for inequality would treat those two as different and skip
+    /// utilization, so the first input would win. Among the same blocked-or-not,
     /// higher utilization wins; sooner reset breaks a further tie. Used only to
     /// pick "the worst" — never to drop a limit.
     static func isLessUrgent(_ lhs: Limit, _ rhs: Limit) -> Bool {
-        if lhs.locked != rhs.locked {
-            return lhs.locked != .locked && rhs.locked == .locked
-        }
+        let lhsBlocked = lhs.locked == .locked
+        let rhsBlocked = rhs.locked == .locked
+        if lhsBlocked != rhsBlocked { return !lhsBlocked }
         if lhs.utilization != rhs.utilization {
             return lhs.utilization < rhs.utilization
         }

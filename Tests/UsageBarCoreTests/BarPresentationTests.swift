@@ -51,11 +51,31 @@ struct BarPresentationTests {
             Limit(id: "primary", label: "Woche", utilization: 0.4, resetsAt: nil, locked: .locked, scope: .account),
         ]))
 
-        let bar = BarPresentation.of(outcomes: [claude, chatGPT])
-        #expect(bar.title == "40%")
-        #expect(bar.tone == .critical)
-        #expect(bar.provider == .chatGPT)
-        #expect(bar.worst?.locked == .locked)
+        for outcomes in [[claude, chatGPT], [chatGPT, claude]] {
+            let bar = BarPresentation.of(outcomes: outcomes)
+            #expect(bar.title == "40%")
+            #expect(bar.tone == .critical)
+            #expect(bar.provider == .chatGPT)
+            #expect(bar.worst?.locked == .locked)
+        }
+    }
+
+    /// Claude is always `.unknown`. Treating that as different from `.unlocked`
+    /// made the first input win and hid Grok at 90% behind Claude at 10%.
+    @Test func unknownAndUnlockedDeferToUtilizationRegardlessOfOrder() {
+        let claude = UsageOutcome.snapshot(UsageSnapshot(provider: .claude, limits: [
+            Limit(id: "weekly_all", label: "Woche", utilization: 0.1, resetsAt: nil, locked: .unknown, scope: .account),
+        ]))
+        let grok = UsageOutcome.snapshot(UsageSnapshot(provider: .grok, limits: [
+            Limit(id: "fast", label: "2 Stunden · fast", utilization: 0.9, resetsAt: nil, locked: .unlocked, scope: .account),
+        ]))
+
+        for outcomes in [[claude, grok], [grok, claude]] {
+            let bar = BarPresentation.of(outcomes: outcomes)
+            #expect(bar.title == "90%")
+            #expect(bar.tone == .critical)
+            #expect(bar.provider == .grok)
+        }
     }
 
     @Test func expiredDoesNotHideARealReading() {
