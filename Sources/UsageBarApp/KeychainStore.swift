@@ -5,7 +5,6 @@ import UsageBarCore
 /// Credentials live in the Keychain. Never in a file, never in a log.
 enum KeychainStore {
     private static let service = AppIdentity.keychainService
-    private static let legacyService = AppIdentity.legacyKeychainService
     private static let account = "credentials"
 
     private struct Stored: Codable {
@@ -42,13 +41,14 @@ enum KeychainStore {
             }
             return loaded.store
         }
-        // Bundle id changed with the WhatsMyUsage rename. Copy the old item
+        // Service name changed with the product domain. Copy the old item
         // across so a rebuild does not look like a fresh install.
-        if let legacy = read(service: legacyService) {
-            let loaded = decode(legacy)
+        for legacy in AppIdentity.legacyKeychainServices {
+            guard let data = read(service: legacy) else { continue }
+            let loaded = decode(data)
             if !loaded.store.isEmpty {
                 write(encode(loaded.store))
-                delete(service: legacyService)
+                delete(service: legacy)
             }
             return loaded.store
         }
@@ -197,6 +197,7 @@ enum KeychainStore {
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
+            kSecAttrLabel as String: service,
             kSecValueData as String: data,
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock,
         ]
