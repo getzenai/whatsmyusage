@@ -14,8 +14,8 @@ Konto gesperrt war. Die App muss über alle Limits gehen und das **schlimmste** 
 | Anbieter | Endpunkt | Stand |
 |---|---|---|
 | Claude | `/api/bootstrap`, `/api/organizations/{id}/usage` | live gemessen, siehe [docs/RESEARCH_CLAUDE_ENDPOINT.md](docs/RESEARCH_CLAUDE_ENDPOINT.md) |
-| ChatGPT | Usage-Seite `chatgpt.com/#settings/Usage` (clientseitige Route) | Endpunkt darunter noch unbekannt |
-| Grok | Usage-Seite `grok.com/?referrer=website&_s=usage` | Endpunkt darunter noch unbekannt |
+| ChatGPT | `GET /backend-api/wham/usage` | live gemessen, siehe [docs/RESEARCH_CHATGPT_GROK_ENDPOINTS.md](docs/RESEARCH_CHATGPT_GROK_ENDPOINTS.md) |
+| Grok | `POST /rest/rate-limits` (pro Modell) | live gemessen, siehe [docs/RESEARCH_CHATGPT_GROK_ENDPOINTS.md](docs/RESEARCH_CHATGPT_GROK_ENDPOINTS.md) |
 
 ## Umgang mit Cookies — verbindlich
 
