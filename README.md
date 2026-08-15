@@ -33,3 +33,40 @@ die *Form* einer Antwort, nie ein Konto.
 Bei ChatGPT ist das Sitzungstoken auf mehrere nummerierte Cookies aufgeteilt
 (`…session-token.0`, `…session-token.1`) — die Extraktion muss die Teile nach Index sortiert
 wieder zusammensetzen, sonst ist das Token still ungültig.
+
+## Bauen
+
+```
+swift test
+Scripts/make-app-bundle.sh        # → .build/AI Usage Bar.app
+open ".build/AI Usage Bar.app"
+```
+
+Die App ist ein Menüleisten-Accessory (kein Dock-Icon). Beim ersten Start öffnet sich
+das Cookie-Fenster. Ein Paste aus dem Safari-Cookie-Reiter reicht; erkannte Schlüssel
+wandern in die Keychain, der Rohtext nicht.
+
+Die Leiste zeigt das **schlimmste account-weite Limit** über alle Anbieter. Ein volles
+Modell-Limit (z. B. nur ein Claude-Modell) färbt die Leiste nicht — das steht im Menü.
+
+| Tastatur | Aktion |
+|---|---|
+| ⌘R | aktualisieren |
+| ⌘, | Cookies |
+| ⌘Q | beenden |
+
+Auffrischung zusätzlich alle fünf Minuten.
+
+## Kern
+
+`UsageBarCore` ist ohne Netz testbar:
+
+- `SessionCookies.extractSessionKey` — Cookie-Text → Claude `sessionKey`, ChatGPT-Teile
+  (nach Index sortiert, als nummerierte Cookies gesendet), Grok `sso`
+- `UsageParser.parseUsage` — HTTP-Status + Body → gemeinsames Modell
+  (Bezeichnung, Auslastung 0…1, optionale Zurücksetzung, gesperrt ja/nein/**unbekannt**)
+- 401 = abgelaufen; 403 auf einer Claude-Org = diese Org ist nicht trackbar;
+  403 auf ChatGPT/Grok ist **kein** Logout (Cloudflare)
+
+Pro Anbieter ein Übersetzer. Claude erfindet keinen Sperrzustand. ChatGPT nimmt `allowed`.
+Grok schließt gesperrt aus `remainingQueries == 0`.
