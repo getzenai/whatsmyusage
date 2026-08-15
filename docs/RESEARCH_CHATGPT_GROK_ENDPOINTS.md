@@ -74,6 +74,10 @@ Ergänzende Endpunkte, für v1 nicht nötig:
 
 **Der Endpunkt ist `POST https://grok.com/rest/rate-limits` mit `{"modelName":"<modell>"}`.**
 
+> **Nachtrag 15.08.: das ist nur das Kurzfrist-Fenster.** Das Wochenlimit, das die Grok-Oberfläche
+> anzeigt, steht hier nicht drin und kann hoch stehen, während alle 2-h-Fenster auf 0 % sind.
+> Quelle und Kodierung: `RESEARCH_GROK_WEEKLY_LIMIT.md`.
+
 ```json
 {"windowSizeSeconds": 7200, "remainingQueries": 270, "totalQueries": 270,
  "lowEffortRateLimits": null, "highEffortRateLimits": null}
