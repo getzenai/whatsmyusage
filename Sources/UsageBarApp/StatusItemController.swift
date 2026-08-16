@@ -11,6 +11,8 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     var onOpenSettings: (() -> Void)?
     var onQuit: (() -> Void)?
     var onRename: ((String, String) -> Void)?
+    /// Asked for on every popover open, so the badges are as fresh as the log.
+    var historyProvider: (() -> PopoverHistory)?
 
     private var outcomes: [UsageOutcome] = []
     private var lastError: String?
@@ -89,6 +91,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     private func installPopoverContent() {
         let view = UsagePopoverView(
             cards: cards,
+            history: historyProvider?() ?? .none,
             onRename: { [weak self] id, name in
                 self?.onRename?(id, name)
                 if self?.popover.isShown == true {

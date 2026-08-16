@@ -4,6 +4,7 @@ import UsageBarCore
 /// Popover body. Custom views — not disabled menu rows — so the type stays readable.
 struct UsagePopoverView: View {
     let cards: [AccountCard]
+    var history: PopoverHistory = .none
     var onRename: (String, String) -> Void
     var onRefresh: () -> Void
     var onCookies: () -> Void
@@ -21,6 +22,11 @@ struct UsagePopoverView: View {
                     if index > 0 { Divider().opacity(0.35) }
                     AccountCardView(card: card, onRename: onRename)
                 }
+            }
+
+            if !history.isEmpty {
+                Divider().opacity(0.35)
+                HistorySection(history: history)
             }
 
             Divider().opacity(0.35)
@@ -153,5 +159,84 @@ private struct LimitRow: View {
         case .ok: return .green
         default: return .gray
         }
+    }
+}
+
+/// The past, under the accounts: what you are waiting on, and the badges the log
+/// earned. Collapsed by default — this is the fun part, not the point of the app.
+private struct HistorySection: View {
+    let history: PopoverHistory
+    @AppStorage("showAchievements") private var expanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(history.waits, id: \.trackingID) { wait in
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text("Waiting")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                    // The measured wait, not now − since: the last reading is the last
+                    // thing we know. Inventing the minutes since would be guessing.
+                    Text(wait.duration.hoursAndMinutes)
+                        .font(.system(size: 12, weight: .semibold).monospacedDigit())
+                        .foregroundStyle(.primary)
+                    Text("for \(wait.label)")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 8)
+                }
+            }
+
+            if !history.achievements.isEmpty {
+                Button {
+                    expanded.toggle()
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: expanded ? "chevron.down" : "chevron.right")
+                            .font(.system(size: 9, weight: .semibold))
+                        Text("Achievements")
+                            .font(.system(size: 12, weight: .medium))
+                        Text("\(history.earnedCount)/\(history.achievements.count)")
+                            .font(.system(size: 11).monospacedDigit())
+                            .foregroundStyle(.secondary)
+                        Spacer(minLength: 8)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.primary)
+
+                if expanded {
+                    ForEach(history.achievements) { achievement in
+                        AchievementRow(achievement: achievement)
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+    }
+}
+
+private struct AchievementRow: View {
+    let achievement: Achievements.Achievement
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: achievement.isEarned ? "checkmark.seal.fill" : "lock")
+                .font(.system(size: 11))
+                .foregroundStyle(achievement.isEarned ? Color.accentColor : Color.secondary)
+                .frame(width: 14)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(achievement.title)
+                    .font(.system(size: 12, weight: achievement.isEarned ? .medium : .regular))
+                // Locked badges show what it takes; earned ones show the measured fact.
+                Text(achievement.detail)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 8)
+        }
+        .foregroundStyle(achievement.isEarned ? .primary : .secondary)
     }
 }
