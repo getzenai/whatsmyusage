@@ -74,4 +74,25 @@ struct ChatGPTParserTests {
     @Test func missingWindowsIsEmpty() {
         #expect(parse(#"{"plan_type":"team","rate_limit":{}}"#) == .empty)
     }
+
+    @Test func resetCreditsZeroIsNoneNotDisplayed() {
+        let body = Data(#"{"available_count":0,"credits":[],"immediate_reset_purchase_eligible":false,"total_earned_count":0}"#.utf8)
+        #expect(UsageParser.parseChatGPTResetCredits(body: body) == .none)
+        #expect(ResetRead.label(for: 0) == nil)
+    }
+
+    @Test func resetCreditsMissingKeyIsOmitted() {
+        #expect(UsageParser.parseChatGPTResetCredits(body: Data(#"{"credits":[]}"#.utf8)) == nil)
+        #expect(UsageParser.parseChatGPTResetCredits(body: Data(#"{}"#.utf8)) == nil)
+        #expect(UsageParser.parseChatGPTResetCredits(body: Data("not-json".utf8)) == nil)
+    }
+
+    @Test func resetCreditsPositiveIsAvailable() {
+        let one = Data(#"{"available_count":1,"credits":[],"immediate_reset_purchase_eligible":false}"#.utf8)
+        let two = Data(#"{"available_count":2}"#.utf8)
+        #expect(UsageParser.parseChatGPTResetCredits(body: one) == .available(1))
+        #expect(UsageParser.parseChatGPTResetCredits(body: two) == .available(2))
+        #expect(ResetRead.label(for: 1) == "Reset available")
+        #expect(ResetRead.label(for: 2) == "2 resets available")
+    }
 }

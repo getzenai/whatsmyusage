@@ -342,6 +342,26 @@ struct BarPresentationTests {
         #expect(BarPresentation.of(outcomes: [a, b]).segments.count == 2)
     }
 
+    @Test func resetAvailableZeroIsHiddenAndOneIsLabeled() {
+        let locked = AccountCard(
+            trackingID: "chatgpt:a",
+            provider: .chatGPT,
+            defaultName: "ChatGPT",
+            limits: [Limit(id: "w", label: "Week", utilization: 1, resetsAt: nil, locked: .locked, scope: .account)],
+            tone: .blocked,
+            utilization: 1,
+            resetAvailable: 0
+        )
+        #expect(locked.resetAvailable == nil)
+        #expect(locked.resetAvailableLabel == nil)
+
+        let one = locked.withResetAvailable(1)
+        let two = locked.withResetAvailable(2)
+        #expect(one.resetAvailableLabel == "Reset available")
+        #expect(two.resetAvailableLabel == "2 resets available")
+        #expect(one.displaying(limits: one.limits).resetAvailableLabel == "Reset available")
+    }
+
     @Test func hidingALimitDropsItFromThePillTone() {
         let card = AccountCard(
             trackingID: "claude:a",

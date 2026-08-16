@@ -25,6 +25,10 @@ Read `README.md` and `docs/` before changing parsers or cookie handling.
   return an empty body and `grpc-status: 13`. Status is in the trailer frame
   (flag `0x80`), never in the HTTP header. Only take the limit when field
   `1.8.1 == 2` (weekly); any other period type is dropped, not remapped.
+- Reset vouchers are display-only. Never call `redeemReset` or any purchase
+  path. A missing field is a miss, not 0 — do not `?? 0`. Show the line only
+  when the provider sent a count ≥ 1. Claude has no such endpoint. The extra
+  call must not delay the limit refresh.
 - The usage log stores every reading, never a state change it decided at write time,
   and never `accountLabel` (org name, plan). The series key is `trackingID + limit.id`,
   which survives a rename. Anything derived — resets, waits, burn rate, achievements —
