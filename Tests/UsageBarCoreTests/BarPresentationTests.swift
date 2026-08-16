@@ -544,16 +544,37 @@ struct BarPresentationTests {
         #expect(BarPresentation.showing([a, b]).segments.count == 2)
     }
 
-    @Test func compactPillStaysRedWhileOneAccountIsLocked() {
+    /// One locked account among open ones must not paint the whole slot red.
+    /// ChatGPT and Grok send `locked` for a meter that hit 100 % and nothing
+    /// more, so "any lock wins" made the compact pill red almost always.
+    @Test func compactPillAveragesInsteadOfObeyingOneLock() {
         let locked = card("a", .grok, [limit("fast", 1, resetsIn: 600, locked: .locked)])
         let idle = card("b", .claude, [limit("session", 0, resetsIn: 600)])
         let bar = BarPresentation.showing([locked, idle], pill: .compact)
-        // The average alone would be 50 % and paint green over blocked work.
-        #expect(bar.segments.first?.tone == .blocked)
         #expect(bar.segments.first?.utilization == 0.5)
+        #expect(bar.segments.first?.tone == .ok)
     }
 
-    @Test func compactPillSeesALockOutsideTheShortestWindow() {
+    /// Four accounts at the wall and one empty: the average carries the news,
+    /// and it lands in the warning band rather than at either extreme.
+    @Test func compactPillShowsOneOpenAccountAmongFourFullOnes() {
+        let full = (0..<4).map { card("f\($0)", .claude, [limit("week", 1, resetsIn: 600, locked: .locked)]) }
+        let open = card("open", .grok, [limit("week", 0, resetsIn: 600)])
+        let bar = BarPresentation.showing(full + [open], pill: .compact)
+        #expect(bar.segments.first?.utilization == 0.8)
+        #expect(bar.segments.first?.tone == .warning)
+    }
+
+    /// Everything shut is the one case that must still read as the wall — and
+    /// it does so through the average, without a lock rule of its own.
+    @Test func compactPillIsRedOnlyWhenEveryAccountIsFull() {
+        let cards = (0..<3).map { card("f\($0)", .claude, [limit("week", 1, resetsIn: 600)]) }
+        let bar = BarPresentation.showing(cards, pill: .compact)
+        #expect(bar.segments.first?.utilization == 1)
+        #expect(bar.segments.first?.tone == .blocked)
+    }
+
+    @Test func compactPillTakesTheShortestWindowEvenWhenALongerOneIsLocked() {
         // Grok's week can be locked while its two-hour window is half empty.
         let grok = card("a", .grok, [
             limit("fast", 0.5, resetsIn: 1800),
@@ -562,7 +583,7 @@ struct BarPresentationTests {
         let bar = BarPresentation.showing([grok], pill: .compact)
         #expect(BarPresentation.shortestWindowLimits([grok]).map(\.id) == ["fast"])
         #expect(bar.segments.first?.utilization == 0.5)
-        #expect(bar.segments.first?.tone == .blocked)
+        #expect(bar.segments.first?.tone == .ok)
     }
 
     @Test func compactPillKeepsAFailureVisibleWithoutAnyReading() {
