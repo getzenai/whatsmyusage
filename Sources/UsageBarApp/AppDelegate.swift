@@ -101,6 +101,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func apply(_ byProvider: [Provider: [UsageOutcome]]) {
         let raw = BarPresentation.cards(byProvider: byProvider)
+        AccountNames.persistDefaultNames(raw)
         let shown = DisplayStore.load().applied(to: raw)
         statusItem?.update(cards: shown, byProvider: byProvider)
         settings.didRefresh(byProvider: byProvider)
