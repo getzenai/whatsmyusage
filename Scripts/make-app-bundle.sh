@@ -27,14 +27,18 @@ REPO_ROOT="$PWD"
 
 echo "==> Building $PRODUCT_NAME ($CONFIGURATION)"
 swift build -c "$CONFIGURATION" --product "$PRODUCT_NAME"
+echo "==> Building whatsmyusage ($CONFIGURATION)"
+swift build -c "$CONFIGURATION" --product whatsmyusage
 
 BIN_PATH="$(swift build -c "$CONFIGURATION" --product "$PRODUCT_NAME" --show-bin-path)"
+CLI_BIN_PATH="$(swift build -c "$CONFIGURATION" --product whatsmyusage --show-bin-path)"
 APP_PATH="$REPO_ROOT/.build/$APP_NAME.app"
 
 echo "==> Assembling $APP_PATH"
 rm -rf "$APP_PATH"
 mkdir -p "$APP_PATH/Contents/MacOS" "$APP_PATH/Contents/Resources"
 cp "$BIN_PATH/$PRODUCT_NAME" "$APP_PATH/Contents/MacOS/$APP_NAME"
+cp "$CLI_BIN_PATH/whatsmyusage" "$APP_PATH/Contents/MacOS/whatsmyusage"
 
 cat > "$APP_PATH/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -73,6 +77,15 @@ codesign --force --sign "$SIGN_IDENTITY" --timestamp=none "$APP_PATH"
 codesign --verify --verbose=2 "$APP_PATH"
 codesign -d -r- "$APP_PATH" 2>&1 | sed -n 's/^.*designated => /designated => /p'
 
+# Copy the signed CLI onto PATH so agents can run `whatsmyusage status --json`
+# without knowing the bundle. ~/.local/bin is user-writable and already on
+# Fabian's PATH; no sudo, no second Keychain identity.
+CLI_PATH="${HOME}/.local/bin"
+mkdir -p "$CLI_PATH"
+cp "$APP_PATH/Contents/MacOS/whatsmyusage" "$CLI_PATH/whatsmyusage"
+chmod +x "$CLI_PATH/whatsmyusage"
+
 echo
 echo "Built $APP_PATH ($VERSION · $BUILD)"
+echo "CLI: $CLI_PATH/whatsmyusage"
 echo "Run it with:  open \"$APP_PATH\""

@@ -1,6 +1,7 @@
 /// User-facing name, bundle id, Keychain item. Keep in sync with
 /// `Scripts/make-app-bundle.sh` (`APP_NAME`, `BUNDLE_ID`).
 enum AppIdentity {
+    /// Keep in sync with `UsageLog.defaultAppName` — that is how the CLI finds the log.
     static let displayName = "WhatsMyUsage"
     static let bundleID = "com.whatsmyusage.app"
     /// Shown verbatim in the macOS Keychain sheet: 'access key "<this>"'.
