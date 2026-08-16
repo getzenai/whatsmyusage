@@ -96,11 +96,37 @@ public enum Achievements {
 
     // MARK: - Achievements
 
+    public enum Section: String, CaseIterable, Sendable {
+        case heavyUse = "Heavy use"
+        case simultaneous = "At once"
+        case waiting = "Waiting"
+        case pace = "Pace"
+        case clock = "Time of day"
+        case stamina = "Stamina"
+        case collection = "Collection"
+        case husbandry = "Husbandry"
+        case log = "The log"
+    }
+
     public enum Kind: String, CaseIterable, Sendable {
         case firstMaxOut
-        case longestWait
+        case regular
+        case century
+        case double
+        case hatTrick
         case fullHouse
+        case grandSlam
+        case everythingAtOnce
+        case splitPersonality
+        case longestWait
+        case longHaul
+        case overnight
+        case lostWeekend
+        case patience
         case speedrun
+        case sprint
+        case fromZero
+        case slowBurn
         case nightOwl
         case weekStreak
         case cleanWeek
@@ -108,12 +134,37 @@ public enum Achievements {
         public var title: String {
             switch self {
             case .firstMaxOut: "Maxed out"
-            case .longestWait: "The wait"
+            case .regular: "Regular"
+            case .century: "Century"
+            case .double: "Double"
+            case .hatTrick: "Hat trick"
             case .fullHouse: "Full house"
+            case .grandSlam: "Grand slam"
+            case .everythingAtOnce: "Everything at once"
+            case .splitPersonality: "Split personality"
+            case .longestWait: "The wait"
+            case .longHaul: "Long haul"
+            case .overnight: "Overnight"
+            case .lostWeekend: "Lost weekend"
+            case .patience: "Patience"
             case .speedrun: "Speedrun"
+            case .sprint: "Sprint"
+            case .fromZero: "From zero"
+            case .slowBurn: "Slow burn"
             case .nightOwl: "Night shift"
             case .weekStreak: "Seven in a row"
             case .cleanWeek: "Clean week"
+            }
+        }
+
+        public var section: Section {
+            switch self {
+            case .firstMaxOut, .regular, .century, .double, .hatTrick: .heavyUse
+            case .fullHouse, .grandSlam, .everythingAtOnce, .splitPersonality: .simultaneous
+            case .longestWait, .longHaul, .overnight, .lostWeekend, .patience: .waiting
+            case .speedrun, .sprint, .fromZero, .slowBurn: .pace
+            case .nightOwl: .clock
+            case .weekStreak, .cleanWeek: .stamina
             }
         }
 
@@ -122,9 +173,23 @@ public enum Achievements {
         public var requirement: String {
             switch self {
             case .firstMaxOut: "Run one limit all the way to full."
-            case .longestWait: "Wait out a full limit for an hour or more."
+            case .regular: "Hit a full limit ten times."
+            case .century: "Hit a full limit a hundred times."
+            case .double: "Fill two different limits on the same day."
+            case .hatTrick: "Fill three different accounts on the same day."
             case .fullHouse: "Have two providers blocked at the same time."
+            case .grandSlam: "Have all three providers blocked at once."
+            case .everythingAtOnce: "Have five limits full at the same moment."
+            case .splitPersonality: "Have two accounts of the same provider full at once."
+            case .longestWait: "Wait out a full limit for an hour or more."
+            case .longHaul: "Wait out a full limit for six hours."
+            case .overnight: "Stay full for twelve hours straight."
+            case .lostWeekend: "Stay full for forty-eight hours straight."
+            case .patience: "Accumulate seven days of waiting."
             case .speedrun: "Go from under 10 % to full within six hours."
+            case .sprint: "Go from under 10 % to full within one hour."
+            case .fromZero: "Go from 0 % to full on the same day."
+            case .slowBurn: "Take six days to fill a weekly limit."
             case .nightOwl: "Burn limit between 1 and 5 in the morning."
             case .weekStreak: "Use something seven days in a row."
             case .cleanWeek: "Seven days watched without hitting a single limit."
@@ -172,9 +237,23 @@ public enum Achievements {
         return Kind.allCases.map { kind in
             switch kind {
             case .firstMaxOut: firstMaxOut(runs)
-            case .longestWait: longestWait(runs)
-            case .fullHouse: fullHouse(accountRuns)
-            case .speedrun: speedrun(series)
+            case .regular: countedMaxOuts(accountRuns, needed: 10, kind: .regular)
+            case .century: countedMaxOuts(accountRuns, needed: 100, kind: .century)
+            case .double: sameDayDistinctLimits(accountRuns, needed: 2, kind: .double, calendar: calendar)
+            case .hatTrick: sameDayDistinctAccounts(accountRuns, needed: 3, kind: .hatTrick, calendar: calendar)
+            case .fullHouse: overlappingProviders(accountRuns, needed: 2, kind: .fullHouse)
+            case .grandSlam: overlappingProviders(accountRuns, needed: 3, kind: .grandSlam)
+            case .everythingAtOnce: overlappingLimits(accountRuns, needed: 5, kind: .everythingAtOnce)
+            case .splitPersonality: splitPersonality(accountRuns)
+            case .longestWait: waitOfAtLeast(accountRuns, 3600, kind: .longestWait)
+            case .longHaul: waitOfAtLeast(accountRuns, 6 * 3600, kind: .longHaul)
+            case .overnight: waitOfAtLeast(accountRuns, 12 * 3600, kind: .overnight)
+            case .lostWeekend: waitOfAtLeast(accountRuns, 48 * 3600, kind: .lostWeekend)
+            case .patience: patience(accountRuns)
+            case .speedrun: speedrun(series, within: 6 * 3600, kind: .speedrun)
+            case .sprint: speedrun(series, within: 3600, kind: .sprint)
+            case .fromZero: fromZero(series, calendar: calendar)
+            case .slowBurn: slowBurn(series)
             case .nightOwl: nightOwl(series, calendar: calendar)
             case .weekStreak: weekStreak(series, calendar: calendar)
             case .cleanWeek: cleanWeek(accountRuns, observedDays: observedDays, calendar: calendar)
@@ -206,25 +285,99 @@ public enum Achievements {
         return Achievement(kind: .firstMaxOut, earnedAt: first, detail: "First hit \(Self.day(first)).")
     }
 
-    private static func longestWait(_ runs: [FullRun]) -> Achievement {
+    private static func countedMaxOuts(_ runs: [FullRun], needed: Int, kind: Kind) -> Achievement {
+        let ordered = runs.sorted { $0.firstSeenFull < $1.firstSeenFull }
+        guard ordered.count >= needed else {
+            return Achievement(kind: kind, earnedAt: nil, detail: "\(ordered.count) of \(needed) so far.")
+        }
+        let hit = ordered[needed - 1]
+        return Achievement(
+            kind: kind,
+            earnedAt: hit.firstSeenFull,
+            detail: "\(needed) full limits. Last one \(hit.label) on \(Self.day(hit.firstSeenFull))."
+        )
+    }
+
+    private static func sameDayDistinctLimits(
+        _ runs: [FullRun],
+        needed: Int,
+        kind: Kind,
+        calendar: Calendar
+    ) -> Achievement {
+        let grouped = Dictionary(grouping: runs) { calendar.startOfDay(for: $0.firstSeenFull) }
+        var best: (at: Date, count: Int)?
+        for (_, dayRuns) in grouped {
+            let firstByLimit = Dictionary(grouping: dayRuns) { "\($0.trackingID)|\($0.limitID)" }
+                .mapValues { $0.map(\.firstSeenFull).min()! }
+            let count = firstByLimit.count
+            guard count > 0 else { continue }
+            let at = firstByLimit.values.sorted()[min(needed, count) - 1]
+            if best == nil || count > best!.count || (count == best!.count && at < best!.at) {
+                best = (at, count)
+            }
+        }
+        guard let best, best.count >= needed else {
+            if let best, best.count > 0 {
+                return Achievement(kind: kind, earnedAt: nil, detail: "\(best.count) of \(needed) so far.")
+            }
+            return locked(kind)
+        }
+        return Achievement(
+            kind: kind,
+            earnedAt: best.at,
+            detail: "\(best.count) different limits full on \(Self.day(best.at))."
+        )
+    }
+
+    private static func sameDayDistinctAccounts(
+        _ runs: [FullRun],
+        needed: Int,
+        kind: Kind,
+        calendar: Calendar
+    ) -> Achievement {
+        let grouped = Dictionary(grouping: runs) { calendar.startOfDay(for: $0.firstSeenFull) }
+        var best: (at: Date, count: Int)?
+        for (_, dayRuns) in grouped {
+            let firstByAccount = Dictionary(grouping: dayRuns, by: \.trackingID)
+                .mapValues { $0.map(\.firstSeenFull).min()! }
+            let count = firstByAccount.count
+            guard count > 0 else { continue }
+            let at = firstByAccount.values.sorted()[min(needed, count) - 1]
+            if best == nil || count > best!.count || (count == best!.count && at < best!.at) {
+                best = (at, count)
+            }
+        }
+        guard let best, best.count >= needed else {
+            if let best, best.count > 0 {
+                return Achievement(kind: kind, earnedAt: nil, detail: "\(best.count) of \(needed) so far.")
+            }
+            return locked(kind)
+        }
+        return Achievement(
+            kind: kind,
+            earnedAt: best.at,
+            detail: "\(best.count) accounts full on \(Self.day(best.at))."
+        )
+    }
+
+    private static func waitOfAtLeast(_ runs: [FullRun], _ seconds: TimeInterval, kind: Kind) -> Achievement {
         let completed = runs.compactMap { run -> (FullRun, TimeInterval)? in
-            guard let duration = run.completedDuration, duration >= 3600 else { return nil }
+            guard let duration = run.completedDuration, duration >= seconds else { return nil }
             return (run, duration)
         }
         guard let (run, duration) = completed.max(by: { $0.1 < $1.1 }) else {
-            return locked(.longestWait)
+            return locked(kind)
         }
         return Achievement(
-            kind: .longestWait,
+            kind: kind,
             earnedAt: run.end,
             detail: "\(duration.hoursAndMinutes) waiting on \(run.label)."
         )
     }
 
-    private static func fullHouse(_ runs: [FullRun]) -> Achievement {
-        // Two providers blocked at once means their full stretches overlap. A run of
-        // unknown start counts from the first reading that saw it full — a lower
-        // bound, never an invented earlier one.
+    private static func overlappingProviders(_ runs: [FullRun], needed: Int, kind: Kind) -> Achievement {
+        // A run of unknown start counts from the first reading that saw it full —
+        // a lower bound, never an invented earlier one.
         var best: (at: Date, providers: Set<Provider>)?
         for (index, left) in runs.enumerated() {
             for right in runs[(index + 1)...] where right.provider != left.provider {
@@ -238,12 +391,102 @@ public enum Achievements {
                 }
             }
         }
-        guard let best else { return locked(.fullHouse) }
+        guard let best, best.providers.count >= needed else {
+            if let best, best.providers.count > 0 {
+                return Achievement(
+                    kind: kind,
+                    earnedAt: nil,
+                    detail: "\(best.providers.count) of \(needed) so far."
+                )
+            }
+            return locked(kind)
+        }
         return Achievement(
-            kind: .fullHouse,
+            kind: kind,
             earnedAt: best.at,
-            detail: "\(best.providers.count) providers blocked at once on \(Self.day(best.at))."
+            detail: kind == .grandSlam
+                ? "All three providers blocked at once on \(Self.day(best.at))."
+                : "\(best.providers.count) providers blocked at once on \(Self.day(best.at))."
         )
+    }
+
+    private static func overlappingLimits(_ runs: [FullRun], needed: Int, kind: Kind) -> Achievement {
+        struct Event {
+            var time: Date
+            var opening: Bool
+            var id: String
+        }
+        var events: [Event] = []
+        for run in runs {
+            let id = "\(run.trackingID)|\(run.limitID)"
+            events.append(Event(time: run.firstSeenFull, opening: true, id: id))
+            events.append(Event(time: run.end ?? run.lastSeenFull, opening: false, id: id))
+        }
+        events.sort { left, right in
+            if left.time != right.time { return left.time < right.time }
+            return left.opening && !right.opening
+        }
+        var active: Set<String> = []
+        var best: (at: Date, count: Int)?
+        for event in events {
+            if event.opening {
+                active.insert(event.id)
+                if best == nil || active.count > best!.count {
+                    best = (event.time, active.count)
+                }
+            } else {
+                active.remove(event.id)
+            }
+        }
+        guard let best, best.count >= needed else {
+            if let best, best.count > 0 {
+                return Achievement(kind: kind, earnedAt: nil, detail: "\(best.count) of \(needed) so far.")
+            }
+            return locked(kind)
+        }
+        return Achievement(
+            kind: kind,
+            earnedAt: best.at,
+            detail: "\(best.count) limits full at once on \(Self.day(best.at))."
+        )
+    }
+
+    private static func splitPersonality(_ runs: [FullRun]) -> Achievement {
+        var best: Date?
+        for (index, left) in runs.enumerated() {
+            for right in runs[(index + 1)...] {
+                guard left.provider == right.provider, left.trackingID != right.trackingID else { continue }
+                guard let overlap = overlapStart(left, right) else { continue }
+                if best == nil || overlap < best! { best = overlap }
+            }
+        }
+        guard let best else { return locked(.splitPersonality) }
+        return Achievement(
+            kind: .splitPersonality,
+            earnedAt: best,
+            detail: "Two accounts of one provider full on \(Self.day(best))."
+        )
+    }
+
+    private static func patience(_ runs: [FullRun]) -> Achievement {
+        let finished = runs.compactMap { run -> (Date, TimeInterval)? in
+            guard let end = run.end, let duration = run.completedDuration else { return nil }
+            return (end, duration)
+        }
+        .sorted { $0.0 < $1.0 }
+        let needed: TimeInterval = 7 * 86_400
+        var total: TimeInterval = 0
+        for (end, duration) in finished {
+            total += duration
+            if total >= needed {
+                return Achievement(
+                    kind: .patience,
+                    earnedAt: end,
+                    detail: "\(total.hoursAndMinutes) waiting in all."
+                )
+            }
+        }
+        return locked(.patience)
     }
 
     private static func overlapStart(_ left: FullRun, _ right: FullRun) -> Date? {
@@ -257,7 +500,11 @@ public enum Achievements {
         run.firstSeenFull <= moment && moment <= (run.end ?? run.lastSeenFull)
     }
 
-    private static func speedrun(_ series: [[UsageMeasurement]], within: TimeInterval = 6 * 3600) -> Achievement {
+    private static func speedrun(
+        _ series: [[UsageMeasurement]],
+        within: TimeInterval,
+        kind: Kind
+    ) -> Achievement {
         var best: (Date, TimeInterval, String)?
         for rows in series {
             var lastLow: Date?
@@ -271,11 +518,71 @@ public enum Achievements {
                 lastLow = nil
             }
         }
-        guard let best else { return locked(.speedrun) }
+        guard let best else { return locked(kind) }
         return Achievement(
-            kind: .speedrun,
+            kind: kind,
             earnedAt: best.0,
             detail: "Empty to full in \(best.1.hoursAndMinutes) on \(best.2)."
+        )
+    }
+
+    private static func fromZero(
+        _ series: [[UsageMeasurement]],
+        calendar: Calendar
+    ) -> Achievement {
+        // A stored 0 % reading and a stored full reading on the same calendar day.
+        // A flat 0 % that crosses midnight is one change point, so sitting at empty
+        // overnight and filling the next day does not count — we never stored a 0 %
+        // on the day it filled.
+        var best: (at: Date, label: String)?
+        for rows in series {
+            var lastZero: Date?
+            for row in rows {
+                if row.utilization == 0 { lastZero = row.observedAt }
+                guard UsageHistory.isFull(row), let zero = lastZero else { continue }
+                if calendar.isDate(zero, inSameDayAs: row.observedAt),
+                   best == nil || row.observedAt < best!.at {
+                    best = (row.observedAt, row.label)
+                }
+                lastZero = nil
+            }
+        }
+        guard let best else { return locked(.fromZero) }
+        return Achievement(
+            kind: .fromZero,
+            earnedAt: best.at,
+            detail: "0 % to full on \(best.label) on \(Self.day(best.at))."
+        )
+    }
+
+    private static func slowBurn(_ series: [[UsageMeasurement]]) -> Achievement {
+        // A weekly limit is one that still had more than four days until reset on
+        // some reading. Limit names are the provider's, not ours.
+        let weekHorizon: TimeInterval = 4 * 86_400
+        let needed: TimeInterval = 6 * 86_400
+        var best: (at: Date, took: TimeInterval, label: String)?
+        for rows in series {
+            let weekly = rows.contains { row in
+                guard let reset = row.resetsAt else { return false }
+                return reset.timeIntervalSince(row.observedAt) > weekHorizon
+            }
+            guard weekly else { continue }
+            var lastLow: Date?
+            for row in rows {
+                if row.utilization <= 0.1 { lastLow = row.observedAt }
+                guard UsageHistory.isFull(row), let low = lastLow else { continue }
+                let took = row.observedAt.timeIntervalSince(low)
+                if took >= needed, best == nil || took < best!.1 {
+                    best = (row.observedAt, took, row.label)
+                }
+                lastLow = nil
+            }
+        }
+        guard let best else { return locked(.slowBurn) }
+        return Achievement(
+            kind: .slowBurn,
+            earnedAt: best.at,
+            detail: "Filled \(best.label) in \(best.took.hoursAndMinutes)."
         )
     }
 
@@ -378,11 +685,15 @@ public enum Achievements {
 }
 
 public extension TimeInterval {
-    /// "3h 05m", "45m". Never "0h", and never "1h 60m" — the carry happens before
-    /// the split, so 119.6 minutes reads "2h 00m" rather than an hour plus sixty.
+    /// "3h 05m", "45m", and from a day up "6d 02h" / "2d 00h". Never "0h", and
+    /// never "1h 60m" — the carry happens before the split, so 119.6 minutes
+    /// reads "2h 00m" rather than an hour plus sixty.
     var hoursAndMinutes: String {
         let minutes = Int((self / 60).rounded())
         let hours = minutes / 60
+        if hours >= 24 {
+            return String(format: "%dd %02dh", hours / 24, hours % 24)
+        }
         guard hours > 0 else { return "\(minutes)m" }
         return String(format: "%dh %02dm", hours, minutes % 60)
     }
