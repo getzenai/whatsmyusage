@@ -42,9 +42,12 @@ Scripts/make-app-bundle.sh        # → .build/WhatsMyUsage.app
 open ".build/WhatsMyUsage.app"
 ```
 
-`Scripts/make-app-bundle.sh` also builds the `whatsmyusage` CLI into the
-bundle and copies it to `~/.local/bin/whatsmyusage`, so agents can run
-`whatsmyusage status --json` without a path.
+`Scripts/make-app-bundle.sh` also builds the `whatsmyusage` CLI and copies
+it to `~/.local/bin/whatsmyusage`, so agents can run `whatsmyusage status --json`
+without a path. The CLI does not go into the `.app` — the app never launches
+it, and on a case-insensitive volume `Contents/MacOS/whatsmyusage` is the
+same path as `WhatsMyUsage`. The script refuses to overwrite a destination
+that already exists under a different name.
 
 Without `USAGE_BAR_SIGN_IDENTITY` the bundle is ad-hoc signed. That identity
 is the binary hash, so Keychain treats every rebuild as a new app and prompts

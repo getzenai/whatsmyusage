@@ -34,11 +34,57 @@ BIN_PATH="$(swift build -c "$CONFIGURATION" --product "$PRODUCT_NAME" --show-bin
 CLI_BIN_PATH="$(swift build -c "$CONFIGURATION" --product whatsmyusage --show-bin-path)"
 APP_PATH="$REPO_ROOT/.build/$APP_NAME.app"
 
+# Copy SRC onto DEST. If DEST already exists it must be the file this script
+# expects to update: a regular file whose on-disk name matches DEST exactly.
+# A case-folded hit (WhatsMyUsage vs whatsmyusage on APFS) is not that file —
+# it is a different product sitting on the same path, and overwriting it is
+# how this script once replaced the menu-bar app with the CLI.
+install_file() {
+    local src="$1" dest="$2"
+    local dest_dir dest_base
+    dest_dir=$(dirname -- "$dest")
+    dest_base=$(basename -- "$dest")
+
+    if [[ ! -f "$src" ]]; then
+        echo "error: source is not a regular file: $src" >&2
+        exit 1
+    fi
+
+    mkdir -p "$dest_dir"
+
+    if [[ -e "$dest" || -L "$dest" ]]; then
+        if [[ -d "$dest" && ! -L "$dest" ]]; then
+            echo "error: refusing to overwrite directory: $dest" >&2
+            exit 1
+        fi
+        if ! python3 -c 'import os, sys; raise SystemExit(0 if sys.argv[2] in os.listdir(sys.argv[1]) else 1)' \
+            "$dest_dir" "$dest_base"; then
+            python3 -c '
+import os, sys
+directory, name = sys.argv[1], sys.argv[2]
+print(f"error: {os.path.join(directory, name)} already exists under a different name; refusing to overwrite", file=sys.stderr)
+for entry in os.listdir(directory):
+    if entry.lower() == name.lower():
+        print(f"error: existing entry is {entry!r}", file=sys.stderr)
+' "$dest_dir" "$dest_base"
+            exit 1
+        fi
+    fi
+
+    cp "$src" "$dest"
+    if ! cmp -s "$src" "$dest"; then
+        echo "error: copy did not land as written: $dest" >&2
+        exit 1
+    fi
+}
+
 echo "==> Assembling $APP_PATH"
 rm -rf "$APP_PATH"
 mkdir -p "$APP_PATH/Contents/MacOS" "$APP_PATH/Contents/Resources"
-cp "$BIN_PATH/$PRODUCT_NAME" "$APP_PATH/Contents/MacOS/$APP_NAME"
-cp "$CLI_BIN_PATH/whatsmyusage" "$APP_PATH/Contents/MacOS/whatsmyusage"
+# The CLI is not a bundle citizen. Agents call ~/.local/bin/whatsmyusage; the
+# app never launches it. Shipping it next to WhatsMyUsage is how a case-fold
+# collision replaced the menu-bar binary with --help.
+install_file "$BIN_PATH/$PRODUCT_NAME" "$APP_PATH/Contents/MacOS/$APP_NAME"
 
 cat > "$APP_PATH/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -77,12 +123,13 @@ codesign --force --sign "$SIGN_IDENTITY" --timestamp=none "$APP_PATH"
 codesign --verify --verbose=2 "$APP_PATH"
 codesign -d -r- "$APP_PATH" 2>&1 | sed -n 's/^.*designated => /designated => /p'
 
-# Copy the signed CLI onto PATH so agents can run `whatsmyusage status --json`
-# without knowing the bundle. ~/.local/bin is user-writable and already on
-# Fabian's PATH; no sudo, no second Keychain identity.
+# Copy the CLI onto PATH so agents can run `whatsmyusage status --json`
+# without a path. ~/.local/bin is user-writable and already on Fabian's
+# PATH; no sudo, no second Keychain identity. Not copied into the bundle:
+# nothing in the app launches it, and a second product in MacOS/ is how
+# the last build overwrote the menu-bar binary on a case-insensitive volume.
 CLI_PATH="${HOME}/.local/bin"
-mkdir -p "$CLI_PATH"
-cp "$APP_PATH/Contents/MacOS/whatsmyusage" "$CLI_PATH/whatsmyusage"
+install_file "$CLI_BIN_PATH/whatsmyusage" "$CLI_PATH/whatsmyusage"
 chmod +x "$CLI_PATH/whatsmyusage"
 
 echo
