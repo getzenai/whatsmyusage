@@ -110,6 +110,11 @@ struct AchievementsTests {
         #expect(TimeInterval(3 * 3600 + 5 * 60).hoursAndMinutes == "3h 05m")
         // 119.6 min: rounding must carry into the hour, not print "1h 60m".
         #expect(TimeInterval(119.6 * 60).hoursAndMinutes == "2h 00m")
+        // A day or more switches unit; under a day stays as it was.
+        #expect(TimeInterval(23 * 3600 + 59 * 60).hoursAndMinutes == "23h 59m")
+        #expect(TimeInterval(24 * 3600).hoursAndMinutes == "1d 00h")
+        #expect(TimeInterval(6 * 86_400 + 2 * 3600).hoursAndMinutes == "6d 02h")
+        #expect(TimeInterval(48 * 3600).hoursAndMinutes == "2d 00h")
     }
 
     @Test func aShortBlockIsNotAWait() {
@@ -278,6 +283,42 @@ struct AchievementsTests {
         #expect(hit.earnedAt == origin.addingTimeInterval(5 * 3600))
     }
 
+    @Test func aShadowingModelLimitDoesNotCountTwice() {
+        // Fable is full because the account week is full. That is one event.
+        let week = [
+            reading(hours: 0, 0.2),
+            reading(hours: 1, 1.0),
+            reading(hours: 1 + 4 * 24, 0.0),
+        ]
+        let fable = [
+            reading(hours: 0, 0.2, limitID: "weekly_scoped", label: "Fable", scope: .model),
+            reading(hours: 1, 1.0, limitID: "weekly_scoped", label: "Fable", scope: .model),
+            reading(hours: 1 + 4 * 24, 0.0, limitID: "weekly_scoped", label: "Fable", scope: .model),
+        ]
+        let list = evaluate([week, fable])
+        #expect(earned(list, .firstMaxOut).isEarned)
+        #expect(earned(list, .regular).detail == "1 of 10 so far.")
+        #expect(earned(list, .double).detail == "1 of 2 so far.")
+        #expect(!earned(list, .patience).isEarned)
+        #expect(earned(list, .longestWait).detail == "4d 00h waiting on Week.")
+    }
+
+    @Test func aModelLimitDoesNotPadEverythingAtOnce() {
+        let four = (0..<4).map { index in
+            [
+                reading(hours: 0, 0.5, trackingID: "acct-\(index)", limitID: "L\(index)", label: "L\(index)"),
+                reading(hours: 2, 1.0, trackingID: "acct-\(index)", limitID: "L\(index)", label: "L\(index)"),
+                reading(hours: 6, 0.0, trackingID: "acct-\(index)", limitID: "L\(index)", label: "L\(index)"),
+            ]
+        }
+        let model = [
+            reading(hours: 0, 0.5, trackingID: "acct-0", limitID: "weekly_opus", label: "Fable", scope: .model),
+            reading(hours: 2, 1.0, trackingID: "acct-0", limitID: "weekly_opus", label: "Fable", scope: .model),
+            reading(hours: 6, 0.0, trackingID: "acct-0", limitID: "weekly_opus", label: "Fable", scope: .model),
+        ]
+        #expect(earned(evaluate(four + [model]), .everythingAtOnce).detail == "4 of 5 so far.")
+    }
+
     @Test func twoRunsOfTheSameLimitAreNotADouble() {
         let same = [
             reading(hours: 1, 0.5),
@@ -336,7 +377,7 @@ struct AchievementsTests {
         let slam = earned(evaluate([claude, grok, gpt]), .grandSlam)
         #expect(slam.isEarned)
         #expect(slam.earnedAt == origin.addingTimeInterval(4 * 3600))
-        #expect(slam.detail.hasPrefix("3 providers"))
+        #expect(slam.detail.hasPrefix("All three providers"))
     }
 
     @Test func twoProvidersAreNotAGrandSlam() {
@@ -445,7 +486,7 @@ struct AchievementsTests {
             reading(hours: 49, 0.0),
         ]]
         #expect(earned(evaluate(fortyEight), .lostWeekend).isEarned)
-        #expect(earned(evaluate(fortyEight), .lostWeekend).detail == "48h 00m waiting on Week.")
+        #expect(earned(evaluate(fortyEight), .lostWeekend).detail == "2d 00h waiting on Week.")
 
         let fortySeven = [[
             reading(hours: 0, 0.2),
@@ -463,7 +504,7 @@ struct AchievementsTests {
         ]]
         let hit = earned(evaluate(seven), .patience)
         #expect(hit.isEarned)
-        #expect(hit.detail == "168h 00m waiting in all.")
+        #expect(hit.detail == "7d 00h waiting in all.")
 
         let shy = [[
             reading(hours: 0, 0.2),
@@ -505,7 +546,7 @@ struct AchievementsTests {
         ]]
         let hit = earned(evaluate(weekly), .slowBurn)
         #expect(hit.isEarned)
-        #expect(hit.detail == "Filled Week in 144h 00m.")
+        #expect(hit.detail == "Filled Week in 6d 00h.")
 
         let shy = [[
             reading(hours: 0, 0.1, resetHours: 7 * 24),

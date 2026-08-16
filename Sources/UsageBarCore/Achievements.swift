@@ -237,19 +237,19 @@ public enum Achievements {
         return Kind.allCases.map { kind in
             switch kind {
             case .firstMaxOut: firstMaxOut(runs)
-            case .regular: countedMaxOuts(runs, needed: 10, kind: .regular)
-            case .century: countedMaxOuts(runs, needed: 100, kind: .century)
-            case .double: sameDayDistinctLimits(runs, needed: 2, kind: .double, calendar: calendar)
+            case .regular: countedMaxOuts(accountRuns, needed: 10, kind: .regular)
+            case .century: countedMaxOuts(accountRuns, needed: 100, kind: .century)
+            case .double: sameDayDistinctLimits(accountRuns, needed: 2, kind: .double, calendar: calendar)
             case .hatTrick: sameDayDistinctAccounts(accountRuns, needed: 3, kind: .hatTrick, calendar: calendar)
             case .fullHouse: overlappingProviders(accountRuns, needed: 2, kind: .fullHouse)
             case .grandSlam: overlappingProviders(accountRuns, needed: 3, kind: .grandSlam)
-            case .everythingAtOnce: overlappingLimits(runs, needed: 5, kind: .everythingAtOnce)
+            case .everythingAtOnce: overlappingLimits(accountRuns, needed: 5, kind: .everythingAtOnce)
             case .splitPersonality: splitPersonality(accountRuns)
-            case .longestWait: waitOfAtLeast(runs, 3600, kind: .longestWait)
-            case .longHaul: waitOfAtLeast(runs, 6 * 3600, kind: .longHaul)
-            case .overnight: waitOfAtLeast(runs, 12 * 3600, kind: .overnight)
-            case .lostWeekend: waitOfAtLeast(runs, 48 * 3600, kind: .lostWeekend)
-            case .patience: patience(runs)
+            case .longestWait: waitOfAtLeast(accountRuns, 3600, kind: .longestWait)
+            case .longHaul: waitOfAtLeast(accountRuns, 6 * 3600, kind: .longHaul)
+            case .overnight: waitOfAtLeast(accountRuns, 12 * 3600, kind: .overnight)
+            case .lostWeekend: waitOfAtLeast(accountRuns, 48 * 3600, kind: .lostWeekend)
+            case .patience: patience(accountRuns)
             case .speedrun: speedrun(series, within: 6 * 3600, kind: .speedrun)
             case .sprint: speedrun(series, within: 3600, kind: .sprint)
             case .fromZero: fromZero(series, calendar: calendar)
@@ -404,7 +404,9 @@ public enum Achievements {
         return Achievement(
             kind: kind,
             earnedAt: best.at,
-            detail: "\(best.providers.count) providers blocked at once on \(Self.day(best.at))."
+            detail: kind == .grandSlam
+                ? "All three providers blocked at once on \(Self.day(best.at))."
+                : "\(best.providers.count) providers blocked at once on \(Self.day(best.at))."
         )
     }
 
@@ -683,11 +685,15 @@ public enum Achievements {
 }
 
 public extension TimeInterval {
-    /// "3h 05m", "45m". Never "0h", and never "1h 60m" — the carry happens before
-    /// the split, so 119.6 minutes reads "2h 00m" rather than an hour plus sixty.
+    /// "3h 05m", "45m", and from a day up "6d 02h" / "2d 00h". Never "0h", and
+    /// never "1h 60m" — the carry happens before the split, so 119.6 minutes
+    /// reads "2h 00m" rather than an hour plus sixty.
     var hoursAndMinutes: String {
         let minutes = Int((self / 60).rounded())
         let hours = minutes / 60
+        if hours >= 24 {
+            return String(format: "%dd %02dh", hours / 24, hours % 24)
+        }
         guard hours > 0 else { return "\(minutes)m" }
         return String(format: "%dh %02dm", hours, minutes % 60)
     }
