@@ -63,6 +63,13 @@ Signed Root**, Certificate Type **Code Signing**. The first open still needs
 right-click → Open (self-signed, Gatekeeper). After that the Keychain asks
 once, then stays quiet across rebuilds.
 
+The version in the bundle is the latest `v<x.y.z>` git tag, and `CFBundleVersion`
+is the commit it was built from. Releases are cut from the PR titles: every PR is
+squashed, the title has to be a [Conventional Commit](https://www.conventionalcommits.org),
+and a push to `main` tags and releases whatever those titles add up to. See
+AGENTS.md → Versioning, and `Scripts/semver.py check-title "feat: …"` to check
+one before opening the PR.
+
 The bundle id is `com.whatsmyusage.app`. The Keychain item — the name macOS
 shows in the access prompt — is `whatsmyusage.com`. A rebuild after a rename
 asks once more, then copies cookies from the previous names

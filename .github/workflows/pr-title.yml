@@ -1,0 +1,26 @@
+name: PR title
+
+# A squash merge turns the PR title into the commit subject, and the release
+# job derives the next version from those subjects. So the title is the thing
+# that has to be a Conventional Commit — checked on every edit, not at merge
+# time when it is too late to be useful.
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the parser itself
+        run: python3 Scripts/semver.py selftest
+      - name: Check the title
+        env:
+          # Never interpolate the title into the shell: it is attacker-controlled
+          # text on a public repo.
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: python3 Scripts/semver.py check-title "$PR_TITLE"
