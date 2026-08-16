@@ -1,0 +1,69 @@
+name: Release
+
+# Every squash onto main is one Conventional Commit. This reads the commits
+# since the last tag, decides patch / minor / major, and tags. Nothing is
+# released when the batch is only docs, chore, ci, test, build or refactor —
+# a version bump is a promise about behaviour.
+#
+# The tag is the only record of the version: there is no VERSION file, and
+# Scripts/make-app-bundle.sh reads the tag too.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # the whole history and every tag, or "since the last tag" is a guess
+
+      - name: Check the parser itself
+        run: python3 Scripts/semver.py selftest
+
+      - name: Decide the version
+        id: decide
+        run: |
+          set -euo pipefail
+          bump=$(python3 Scripts/semver.py bump)
+          current=$(python3 Scripts/semver.py current)
+          next=$(python3 Scripts/semver.py next)
+          echo "bump=$bump" >> "$GITHUB_OUTPUT"
+          echo "version=$next" >> "$GITHUB_OUTPUT"
+          echo "Current $current, bump $bump, next $next"
+          if [ "$bump" = "none" ]; then
+            echo "Nothing user-facing since v$current. No release." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Write the notes
+        if: steps.decide.outputs.bump != 'none'
+        run: |
+          set -euo pipefail
+          python3 Scripts/semver.py notes > release-notes.md
+          cat release-notes.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Tag and release
+        if: steps.decide.outputs.bump != 'none'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.decide.outputs.version }}
+        run: |
+          set -euo pipefail
+          if git rev-parse -q --verify "refs/tags/v$VERSION" >/dev/null; then
+            echo "v$VERSION already exists; nothing to do."
+            exit 0
+          fi
+          git -c user.name=github-actions -c user.email=github-actions@github.com \
+            tag -a "v$VERSION" -m "v$VERSION"
+          git push origin "v$VERSION"
+          gh release create "v$VERSION" --title "v$VERSION" --notes-file release-notes.md
+
+      # TODO(apple-developer): once the Developer ID certificate is in the repo
+      # secrets, build and notarise WhatsMyUsage.app here on a macos runner and
+      # attach the zip with `gh release upload "v$VERSION"`. The version comes
+      # from the tag this job just pushed, so nothing else has to change.

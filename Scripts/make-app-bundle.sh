@@ -16,14 +16,17 @@ CONFIGURATION="${1:-release}"
 BUNDLE_ID="com.whatsmyusage.app"
 APP_NAME="WhatsMyUsage"
 PRODUCT_NAME="UsageBar"
-VERSION="0.1.0"
+cd "$(dirname "$0")/.."
+REPO_ROOT="$PWD"
+
+# The latest v<x.y.z> tag is the version; there is no second copy of it to go
+# stale. A build made after the tag still says the tag's version — CFBundleVersion
+# below carries the commit, which is what tells two builds apart.
+VERSION="$(python3 Scripts/semver.py current)"
 BUILD="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
 if ! git diff --quiet HEAD -- 2>/dev/null; then
     BUILD="${BUILD}-dirty"
 fi
-
-cd "$(dirname "$0")/.."
-REPO_ROOT="$PWD"
 
 echo "==> Building $PRODUCT_NAME ($CONFIGURATION)"
 swift build -c "$CONFIGURATION" --product "$PRODUCT_NAME"

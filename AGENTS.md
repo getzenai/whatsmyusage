@@ -56,6 +56,35 @@ Read `README.md` and `docs/` before changing parsers or cookie handling.
 | `Sources/WhatsMyUsageCLI` | `whatsmyusage` argv + print. No Keychain, no network. |
 | `Tests/UsageBarCoreTests` | Fixtures with placeholders. No network. |
 
+## Versioning
+
+Every PR is squashed, so **the PR title becomes the commit subject and the
+release job reads it**. Title it as a Conventional Commit:
+
+```
+type(scope): subject          feat(cli): show the reset voucher
+type(scope)!: subject         feat(log)!: rekey the series   (breaking)
+```
+
+| Type | Release |
+|---|---|
+| `feat` | minor |
+| `fix`, `perf`, `revert` | patch |
+| `refactor`, `docs`, `test`, `build`, `ci`, `chore`, `style` | none |
+| any type with `!`, or a `BREAKING CHANGE:` footer | major |
+
+- **Git tags are the version.** No VERSION file, nothing to keep in sync.
+  `Scripts/make-app-bundle.sh` and the release job both read the latest tag.
+- **Below 1.0.0 a breaking change bumps the minor**, not the major — a first
+  `feat!:` should not declare the product finished. The strict rule takes over
+  by itself once a tag reads 1.x.
+- **A batch of only `docs` / `chore` / `ci` / `test` / `build` / `refactor`
+  releases nothing.** A version bump is a promise about behaviour.
+- One parser does all of it: `Scripts/semver.py`. Check a title before you open
+  the PR with `Scripts/semver.py check-title "feat: …"`, and see what main would
+  release with `Scripts/semver.py next`. Change the rules there and both CI jobs
+  follow; `Scripts/semver.py selftest` guards it and runs first in both.
+
 ## Verify
 
 `swift test` must pass on the commit you claim it passes on. Run the full
