@@ -13,8 +13,8 @@ enum WhatsMyUsageCLI {
             switch command {
             case .help:
                 FileHandle.standardOutput.write(Data(Command.helpText.utf8))
-            case let .status(json, logURL):
-                try runStatus(json: json, logURL: logURL)
+            case let .status(json, limits, logURL):
+                try runStatus(json: json, limits: limits, logURL: logURL)
             case let .pick(provider, json, logURL):
                 try runPick(provider: provider, json: json, logURL: logURL)
             case let .achievements(json, logURL):
@@ -29,7 +29,7 @@ enum WhatsMyUsageCLI {
         }
     }
 
-    private static func runStatus(json: Bool, logURL: URL?) throws {
+    private static func runStatus(json: Bool, limits: Bool, logURL: URL?) throws {
         let opened = try openLatest(logURL)
         let now = Date()
         let status = UsageQuery.status(from: opened.latest, now: now)
@@ -37,7 +37,14 @@ enum WhatsMyUsageCLI {
             write(try UsageQuery.statusJSON(status))
             return
         }
-        write(humanStatus(status, now: now, path: opened.url.path))
+        let pick = UsageQuery.pick(from: opened.latest, now: now)
+        write(HumanStatus.render(
+            status: status,
+            pick: pick,
+            names: names(),
+            now: now,
+            showLimits: limits
+        ))
     }
 
     private static func runPick(provider: Provider?, json: Bool, logURL: URL?) throws {
@@ -47,7 +54,8 @@ enum WhatsMyUsageCLI {
         if json {
             write(try UsageQuery.pickJSON(pick))
         } else {
-            write(humanPick(pick, now: now))
+            let status = UsageQuery.status(from: opened.latest, now: now)
+            write(HumanStatus.renderPick(pick, status: status, names: names(), now: now))
         }
         if !pick.found { throw CLIError("no usable account", exitCode: 1) }
     }
@@ -63,6 +71,11 @@ enum WhatsMyUsageCLI {
             return
         }
         write(humanAchievements(list, observedAt: observedAt, now: Date()))
+    }
+
+    private static func names() -> HumanStatus.Names {
+        let maps = AccountDisplayNames.loadFromAppSuite()
+        return HumanStatus.Names(custom: maps.custom, defaults: maps.defaults)
     }
 
     private static func openLatest(_ explicit: URL?) throws -> (log: UsageLog, latest: [UsageMeasurement], url: URL) {
@@ -98,43 +111,6 @@ enum WhatsMyUsageCLI {
         write(Data(text.utf8))
     }
 
-    private static func humanStatus(_ status: UsageQuery.Status, now: Date, path: String) -> String {
-        var lines: [String] = []
-        if let observedAt = status.observedAt {
-            lines.append("observedAt \(UsageQuery.iso8601(observedAt))  \(agePhrase(observedAt, now: now))")
-        } else {
-            lines.append("observedAt unknown  (empty log)")
-        }
-        if status.accounts.isEmpty {
-            lines.append("no accounts in \(path)")
-            return lines.joined(separator: "\n")
-        }
-        for account in status.accounts {
-            lines.append("")
-            lines.append("\(account.provider.rawValue)  \(account.trackingID)  \(agePhrase(account.observedAt, now: now))")
-            for limit in account.limits {
-                let util = limit.utilization.map { BarPresentation.percentString($0) } ?? "unknown"
-                let locked = limit.locked?.rawValue ?? "unknown"
-                let reset = limit.resetsAt.map(UsageQuery.iso8601) ?? "—"
-                lines.append(
-                    "  \(pad(limit.limitID, 28))  \(pad(util, 8))  locked \(pad(locked, 9))  resetsAt \(reset)"
-                )
-            }
-        }
-        return lines.joined(separator: "\n")
-    }
-
-    private static func humanPick(_ pick: UsageQuery.Pick, now: Date) -> String {
-        let age = pick.observedAt.map { agePhrase($0, now: now) } ?? "observedAt unknown"
-        guard let trackingID = pick.trackingID, let provider = pick.provider else {
-            let reset = pick.resetsAt.map { "next reset \(UsageQuery.iso8601($0))" } ?? "next reset unknown"
-            return "none usable  \(reset)  \(age)"
-        }
-        let util = pick.utilization.map { BarPresentation.percentString($0) } ?? "unknown"
-        let reset = pick.resetsAt.map { "resetsAt \(UsageQuery.iso8601($0))" } ?? "resetsAt —"
-        return "\(provider.rawValue)  \(trackingID)  \(util)  \(reset)  \(age)"
-    }
-
     private static func humanAchievements(
         _ list: [Achievements.Achievement],
         observedAt: Date?,
@@ -142,37 +118,14 @@ enum WhatsMyUsageCLI {
     ) -> String {
         var lines: [String] = []
         if let observedAt {
-            lines.append("observedAt \(UsageQuery.iso8601(observedAt))  \(agePhrase(observedAt, now: now))")
-        } else {
-            lines.append("observedAt unknown  (empty log)")
+            let age = UsageQuery.isStale(observedAt, now: now) ? "stale" : "fresh"
+            lines.append("\(age)")
         }
         for item in list {
             let mark = item.isEarned ? "earned" : "locked"
-            let when = item.earnedAt.map { "  \(UsageQuery.iso8601($0))" } ?? ""
-            lines.append("\(mark)  \(item.title)\(when)")
-            lines.append("        \(item.detail)")
+            lines.append("\(mark)  \(item.title)")
         }
         return lines.joined(separator: "\n")
-    }
-
-    private static func agePhrase(_ observedAt: Date, now: Date) -> String {
-        let seconds = now.timeIntervalSince(observedAt)
-        if UsageQuery.isStale(observedAt, now: now) {
-            return "stale \(formatAge(seconds))"
-        }
-        return "age \(formatAge(seconds))"
-    }
-
-    private static func formatAge(_ seconds: TimeInterval) -> String {
-        let whole = Int(seconds.rounded())
-        if whole < 60 { return "\(max(0, whole))s" }
-        if whole < 3600 { return "\(whole / 60)m" }
-        return "\(whole / 3600)h"
-    }
-
-    private static func pad(_ text: String, _ width: Int) -> String {
-        if text.count >= width { return text }
-        return text + String(repeating: " ", count: width - text.count)
     }
 }
 
@@ -186,27 +139,25 @@ private struct CLIError: Error {
 }
 
 private enum Command {
-    case status(json: Bool, log: URL?)
+    case status(json: Bool, limits: Bool, log: URL?)
     case pick(provider: Provider?, json: Bool, log: URL?)
     case achievements(json: Bool, log: URL?)
     case help
 
     static let helpText = """
-    whatsmyusage — read the WhatsMyUsage measurement log
-
-    The CLI only reads usage-log.sqlite. It does not touch the network or the
-    Keychain. Numbers older than 5 minutes + 90 seconds are unknown.
+    whatsmyusage — which account has room
 
     Usage:
-      whatsmyusage status [--json]
+      whatsmyusage
+      whatsmyusage status [--json] [--limits]
       whatsmyusage pick [--provider claude|chatGPT|grok] [--json]
       whatsmyusage achievements [--json]
       whatsmyusage --help
 
-    Optional: --log PATH  (default: the running app's usage-log.sqlite)
-
     `pick` treats a full model-scoped limit as blocking. Claude `locked` is
-    always unknown — the provider sends percentages only; read utilization.
+    always unknown — read utilization.
+
+    Optional: --log PATH
 
     Exit codes:
       0  ok (`pick`: an account still has room)
@@ -216,17 +167,26 @@ private enum Command {
     """
 
     static func parse(_ args: [String]) throws -> Command {
-        if args.isEmpty || args.contains("-h") || args.contains("--help") {
+        if args.contains("-h") || args.contains("--help") {
             return .help
         }
+        if args.isEmpty {
+            return .status(json: false, limits: false, log: nil)
+        }
         var rest = args
-        let verb = rest.removeFirst()
+        let verb: String
+        if rest[0].hasPrefix("-") {
+            verb = "status"
+        } else {
+            verb = rest.removeFirst()
+        }
         let json = takeFlag(&rest, "--json")
         let log = try takeValue(&rest, "--log").map { URL(fileURLWithPath: $0) }
         switch verb {
         case "status":
+            let limits = takeFlag(&rest, "--limits")
             try ensureEmpty(rest)
-            return .status(json: json, log: log)
+            return .status(json: json, limits: limits, log: log)
         case "pick":
             let raw = try takeValue(&rest, "--provider")
             try ensureEmpty(rest)

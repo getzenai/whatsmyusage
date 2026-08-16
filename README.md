@@ -98,13 +98,14 @@ It also refreshes every five minutes on its own.
 
 ## CLI
 
-`whatsmyusage` reads only `~/Library/Application Support/WhatsMyUsage/usage-log.sqlite`.
-It does not touch the network or the Keychain, so it is only as fresh as the
-running app. Every command prints `observedAt`. A reading older than five
-minutes plus 90 seconds is `unknown` — never an old number presented as current.
+`whatsmyusage` with no arguments prints which account to use, then one line
+per account. `--json` is the data structure. Names come from the app
+(custom, then onboarding). A reading older than five minutes plus 90 seconds
+is unknown — never an old number presented as current.
 
 ```
-whatsmyusage status --json
+whatsmyusage
+whatsmyusage status [--json] [--limits]
 whatsmyusage pick [--provider claude]
 whatsmyusage achievements --json
 ```

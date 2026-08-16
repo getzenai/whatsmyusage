@@ -6,7 +6,8 @@ import PackageDescription
 //   UsageBarCore — models, cookie extraction, per-provider translators, log, CLI queries
 //   UsageBar     — the menu bar app (assembled into WhatsMyUsage.app by
 //                  Scripts/make-app-bundle.sh; no Xcode project)
-//   whatsmyusage — read-only CLI over usage-log.sqlite (no Keychain, no network)
+//   whatsmyusage — read-only CLI over usage-log.sqlite and app UserDefaults
+//                  (no Keychain, no network)
 //
 // Everything that can be tested lives in UsageBarCore. The app stays thin so
 // `swift test` covers the behaviour that decides what the bar shows.
