@@ -205,6 +205,9 @@ private enum Command {
 
     Optional: --log PATH  (default: the running app's usage-log.sqlite)
 
+    `pick` treats a full model-scoped limit as blocking. Claude `locked` is
+    always unknown — the provider sends percentages only; read utilization.
+
     Exit codes:
       0  ok (`pick`: an account still has room)
       1  `pick`: every account is blocked or stale

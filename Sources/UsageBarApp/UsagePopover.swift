@@ -170,7 +170,7 @@ private struct HistorySection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            ForEach(history.waits, id: \.trackingID) { wait in
+            ForEach(history.waits) { wait in
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Text("Waiting")
                         .font(.system(size: 12))

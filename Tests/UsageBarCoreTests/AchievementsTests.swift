@@ -220,6 +220,22 @@ struct AchievementsTests {
         let waits = Achievements.currentWaits(series: [waiting, alsoWaiting, free])
         #expect(waits.map(\.label) == ["Session", "Week"])
     }
+
+    @Test func twoFullLimitsOnOneAccountAreTwoWaitsWithDistinctIDs() {
+        let session = [
+            reading(hours: 0, 0.5, limitID: "session", label: "5 hours"),
+            reading(hours: 1, 1.0, limitID: "session", label: "5 hours"),
+        ]
+        let week = [
+            reading(hours: 0, 0.5, limitID: "weekly_all", label: "Week"),
+            reading(hours: 2, 1.0, limitID: "weekly_all", label: "Week"),
+        ]
+        let waits = Achievements.currentWaits(series: [session, week])
+        #expect(waits.count == 2)
+        #expect(Set(waits.map(\.id)).count == 2)
+        #expect(waits.allSatisfy { $0.trackingID == "acct-1" })
+        #expect(Set(waits.map(\.limitID)) == ["session", "weekly_all"])
+    }
 }
 
 @Suite("Achievements over the log")

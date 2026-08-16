@@ -145,11 +145,15 @@ public enum Achievements {
     }
 
     /// What the popover shows live, next to the badges: the reset you are waiting on.
-    public struct CurrentWait: Equatable, Sendable {
+    public struct CurrentWait: Equatable, Sendable, Identifiable {
         public let label: String
         public let trackingID: String
+        public let limitID: String
         public let since: Date
         public let asOf: Date
+        /// One account can wait on two limits at once (session and week). The
+        /// popover `ForEach` must not key on `trackingID` alone.
+        public var id: String { "\(trackingID)|\(limitID)" }
         public var duration: TimeInterval { asOf.timeIntervalSince(since) }
     }
 
@@ -185,6 +189,7 @@ public enum Achievements {
             return CurrentWait(
                 label: last.label,
                 trackingID: last.trackingID,
+                limitID: last.limitID,
                 since: wait.since,
                 asOf: wait.asOf
             )

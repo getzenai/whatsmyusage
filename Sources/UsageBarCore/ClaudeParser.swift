@@ -51,6 +51,8 @@ enum ClaudeParser {
                 label: displayName(forKind: key, model: nil),
                 utilization: percent / 100,
                 resetsAt: DateParsing.iso8601(entry["resets_at"]),
+                // Claude sends percentages only. `is_active` is not a lock.
+                // Inventing `.locked` from 100 % is forbidden — see README.
                 locked: .unknown,
                 scope: scope,
                 severity: severity(entry["severity"])
@@ -120,6 +122,7 @@ enum ClaudeParser {
             label: displayName(forKind: kindKey, model: model),
             utilization: percent / 100,
             resetsAt: DateParsing.iso8601(entry["resets_at"]),
+            // Claude sends percentages only. `is_active` is not a lock.
             locked: .unknown,
             scope: model == nil ? .account : .model,
             severity: severity(entry["severity"])
