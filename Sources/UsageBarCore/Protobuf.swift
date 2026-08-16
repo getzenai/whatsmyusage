@@ -115,6 +115,26 @@ enum Proto {
         return nil
     }
 
+    static func string(_ fields: [Field], _ number: UInt64) -> String? {
+        for field in fields {
+            if field.number == number, case .bytes(let data) = field.value {
+                return String(data: data, encoding: .utf8)
+            }
+        }
+        return nil
+    }
+
+    /// Every decoded message on a repeated field. A single truncated child
+    /// is skipped; it does not fail the parent.
+    static func messages(_ fields: [Field], _ number: UInt64) -> [[Field]] {
+        var result: [[Field]] = []
+        for field in fields {
+            guard field.number == number, case .bytes(let data) = field.value else { continue }
+            if let nested = decode(data) { result.append(nested) }
+        }
+        return result
+    }
+
     private struct Reader {
         let data: Data
         var offset = 0

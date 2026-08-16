@@ -32,6 +32,25 @@ public enum LimitScope: String, Sendable, Equatable {
     case model
 }
 
+/// A prepaid usage-reset voucher. Only constructed when the provider sent a
+/// count of at least one. Missing and zero are the same to the UI: hide the line.
+/// Do not coalesce a missing field to 0 — that is how a silent miss becomes
+/// "0 available".
+public enum ResetRead: Equatable, Sendable {
+    case none
+    case available(Int)
+
+    public var count: Int? {
+        if case .available(let n) = self { return n }
+        return nil
+    }
+
+    public static func label(for count: Int) -> String? {
+        if count <= 0 { return nil }
+        return count == 1 ? "Reset available" : "\(count) resets available"
+    }
+}
+
 /// The provider's own reading of how tight this limit is. Carried because it is free
 /// and the provider knows its own thresholds better than we do.
 public enum LimitSeverity: String, Sendable, Equatable {

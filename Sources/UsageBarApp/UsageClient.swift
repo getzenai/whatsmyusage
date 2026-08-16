@@ -12,6 +12,10 @@ struct UsageClient {
         self.session = session
     }
 
+    /// Short enough that a hanging voucher call cannot stall the numbers.
+    /// The limit refresh does not wait on this.
+    private static let resetTimeout: TimeInterval = 4
+
     func refresh(using store: CredentialStore) async -> RefreshResult {
         await withTaskGroup(of: AccountFetch.self) { group in
             for account in store.accounts {
@@ -34,6 +38,30 @@ struct UsageClient {
                 }
             }
             return RefreshResult(byProvider: byProvider, claudeOrgIDsByAccountID: orgIDs)
+        }
+    }
+
+    /// Second pass, after the numbers are on screen. Missing or failed reads
+    /// are omitted from the map so the last good value can stay.
+    func fetchResetCredits(using store: CredentialStore) async -> [String: ResetRead] {
+        await withTaskGroup(of: (String, ResetRead?).self) { group in
+            for account in store.accounts {
+                if let gpt = account.chatGPT {
+                    group.addTask {
+                        ("chatgpt:\(account.id)", await self.fetchChatGPTResets(gpt))
+                    }
+                }
+                if let grok = account.grok {
+                    group.addTask {
+                        ("grok:\(account.id)", await self.fetchGrokResets(grok))
+                    }
+                }
+            }
+            var result: [String: ResetRead] = [:]
+            for await (id, read) in group {
+                if let read { result[id] = read }
+            }
+            return result
         }
     }
 
@@ -227,6 +255,36 @@ struct UsageClient {
         return outcomes
     }
 
+    private func fetchChatGPTResets(_ creds: ChatGPTCredentials) async -> ResetRead? {
+        let session = await get(
+            url: URL(string: "https://chatgpt.com/api/auth/session")!,
+            cookie: creds.cookieHeader,
+            timeout: Self.resetTimeout
+        )
+        guard case .bearer(let token) = UsageParser.chatGPTAccessToken(
+            statusCode: session.status,
+            body: session.body
+        ) else { return nil }
+        let response = await get(
+            url: URL(string: "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits")!,
+            cookie: creds.cookieHeader,
+            authorization: "Bearer \(token)",
+            timeout: Self.resetTimeout
+        )
+        guard response.status == 200 else { return nil }
+        return UsageParser.parseChatGPTResetCredits(body: response.body)
+    }
+
+    private func fetchGrokResets(_ creds: GrokCredentials) async -> ResetRead? {
+        let response = await postGrpcWeb(
+            url: URL(string: "https://grok.com/prod_mc_billing.ConsumerUiSvc/GetRemainingResets")!,
+            cookie: creds.cookieHeader,
+            timeout: Self.resetTimeout
+        )
+        guard response.status == 200 else { return nil }
+        return UsageParser.parseGrokRemainingResets(body: response.body)
+    }
+
     private func claudeTrackingID(_ creds: ClaudeCredentials, accountID: String) -> String {
         if let org = creds.lastActiveOrg, !org.isEmpty { return "claude:\(org)" }
         return "claude:account:\(accountID)"
@@ -263,13 +321,19 @@ struct UsageClient {
         var body: Data
     }
 
-    private func get(url: URL, cookie: String, authorization: String? = nil) async -> HTTPResponse {
+    private func get(
+        url: URL,
+        cookie: String,
+        authorization: String? = nil,
+        timeout: TimeInterval? = nil
+    ) async -> HTTPResponse {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.setValue(cookie, forHTTPHeaderField: "Cookie")
         if let authorization {
             request.setValue(authorization, forHTTPHeaderField: "Authorization")
         }
+        if let timeout { request.timeoutInterval = timeout }
         return await send(request)
     }
 
@@ -282,7 +346,7 @@ struct UsageClient {
         return await send(request)
     }
 
-    private func postGrpcWeb(url: URL, cookie: String) async -> HTTPResponse {
+    private func postGrpcWeb(url: URL, cookie: String, timeout: TimeInterval? = nil) async -> HTTPResponse {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue(cookie, forHTTPHeaderField: "Cookie")
@@ -290,6 +354,7 @@ struct UsageClient {
         request.setValue("1", forHTTPHeaderField: "X-Grpc-Web")
         // Empty protobuf message: data flag + 4-byte zero length. Measured.
         request.httpBody = Data([0x00, 0x00, 0x00, 0x00, 0x00])
+        if let timeout { request.timeoutInterval = timeout }
         return await send(request)
     }
 

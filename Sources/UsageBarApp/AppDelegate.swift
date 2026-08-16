@@ -66,6 +66,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private var lastByProvider: [Provider: [UsageOutcome]] = [:]
+    /// Last successful voucher read per tracking id. A miss does not clear this;
+    /// a successful `.none` does.
+    private var lastResetAvailable: [String: Int] = [:]
 
     @objc private func openSettings() {
         settings.show()
@@ -79,6 +82,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let store = KeychainStore.load()
             if store.isEmpty {
                 self.lastByProvider = [:]
+                self.lastResetAvailable = [:]
                 self.statusItem?.update(outcomes: [])
                 self.settings.didRefresh(byProvider: [:])
                 return
@@ -93,6 +97,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // preference changed, and that is not a new measurement.
             self.usageLog.record(result.byProvider)
             self.apply(result.byProvider)
+
+            // Vouchers after the numbers. A slow or failing extra call must
+            // not hold the limits — they are already on screen.
+            let resets = await self.client.fetchResetCredits(using: store)
+            if Task.isCancelled { return }
+            for (id, read) in resets {
+                if let count = read.count {
+                    self.lastResetAvailable[id] = count
+                } else {
+                    self.lastResetAvailable.removeValue(forKey: id)
+                }
+            }
+            self.apply(self.lastByProvider)
         }
     }
 
@@ -105,7 +122,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         AccountNames.persistDefaultNames(raw)
         let prefs = DisplayStore.load()
         statusItem?.pillStyle = prefs.pill
-        let shown = prefs.applied(to: raw)
+        let shown = prefs.applied(to: raw).map { card in
+            card.withResetAvailable(lastResetAvailable[card.trackingID])
+        }
         statusItem?.update(cards: shown, byProvider: byProvider)
         settings.didRefresh(byProvider: byProvider)
     }
