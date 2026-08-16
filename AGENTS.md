@@ -33,6 +33,9 @@ Read `README.md` and `docs/` before changing parsers or cookie handling.
 - Achievements read the change points, not every row. A rule must therefore measure a
   full stretch to the reading that saw it *end*, never to the last stored full reading:
   the identical readings in between are not kept, so that one collapses to zero.
+- The `whatsmyusage` CLI reads only `usage-log.sqlite`. No network, no Keychain, no
+  cookies. A number older than one refresh (5 min) plus 90 s is `null` / "unknown",
+  never a current value — same rule as the pill (spec 18, 20, 25).
 - Do not hardcode limit names the provider invents. Claude's `limits[]` grows
   new `kind` values; unknown ones pass through.
 
@@ -40,8 +43,9 @@ Read `README.md` and `docs/` before changing parsers or cookie handling.
 
 | Path | What |
 |---|---|
-| `Sources/UsageBarCore` | Common model, `parseUsage`, `extractSessionKey`, translators |
+| `Sources/UsageBarCore` | Common model, `parseUsage`, `extractSessionKey`, translators, log, CLI queries |
 | `Sources/UsageBarApp` | Menu bar, Keychain, `URLSession`. Thin. |
+| `Sources/WhatsMyUsageCLI` | `whatsmyusage` argv + print. No Keychain, no network. |
 | `Tests/UsageBarCoreTests` | Fixtures with placeholders. No network. |
 
 ## Verify

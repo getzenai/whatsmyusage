@@ -74,32 +74,45 @@ public enum UsageLogError: Error, Equatable {
 public final class UsageLog {
     private var db: OpaquePointer?
 
+    /// Same string as `AppIdentity.displayName`. Kept here so the CLI can find the
+    /// log without importing the app target.
+    public static let defaultAppName = "WhatsMyUsage"
+
     /// `~/Library/Application Support/WhatsMyUsage/usage-log.sqlite`.
+    ///
+    /// `create` is for the writer. The CLI passes `false` so a missing log stays
+    /// missing instead of becoming an empty database that looks like "no usage".
     public static func defaultURL(
-        appName: String,
-        fileManager: FileManager = .default
+        appName: String = defaultAppName,
+        fileManager: FileManager = .default,
+        create: Bool = true
     ) throws -> URL {
         let support = try fileManager.url(
             for: .applicationSupportDirectory,
             in: .userDomainMask,
             appropriateFor: nil,
-            create: true
+            create: create
         )
         let directory = support.appendingPathComponent(appName, isDirectory: true)
-        try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+        if create {
+            try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+        }
         return directory.appendingPathComponent("usage-log.sqlite")
     }
 
-    public init(url: URL) throws {
+    public init(url: URL, readOnly: Bool = false) throws {
         var handle: OpaquePointer?
-        let flags = SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX
+        let flags = readOnly
+            ? SQLITE_OPEN_READONLY | SQLITE_OPEN_FULLMUTEX
+            : SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX
         guard sqlite3_open_v2(url.path, &handle, flags, nil) == SQLITE_OK, let handle else {
             let message = handle.map { String(cString: sqlite3_errmsg($0)) } ?? "cannot open \(url.path)"
             sqlite3_close_v2(handle)
             throw UsageLogError.open(message)
         }
         db = handle
-        // WAL so a reader (a future graph view) never blocks the writer.
+        if readOnly { return }
+        // WAL so a reader (the CLI, a future graph view) never blocks the writer.
         try exec("PRAGMA journal_mode=WAL;")
         try exec("PRAGMA synchronous=NORMAL;")
         try migrate()
@@ -353,6 +366,14 @@ public final class UsageLog {
     /// Everything the achievement rules need, in one call.
     public func achievementSeries() throws -> [[UsageMeasurement]] {
         try knownSeries().map { try changePoints(trackingID: $0.trackingID, limitID: $0.limitID) }
+    }
+
+    /// Newest row of every series. The CLI's current-state view — older rows stay
+    /// in the log for history, but they are not the number an agent should act on.
+    public func latestBySeries() throws -> [UsageMeasurement] {
+        try knownSeries().compactMap { pair in
+            try series(trackingID: pair.trackingID, limitID: pair.limitID).last
+        }
     }
 
     public func count() throws -> Int {

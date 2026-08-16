@@ -3,9 +3,10 @@ import PackageDescription
 
 // WhatsMyUsage is a single package:
 //
-//   UsageBarCore — models, cookie extraction, per-provider translators (all testable)
+//   UsageBarCore — models, cookie extraction, per-provider translators, log, CLI queries
 //   UsageBar     — the menu bar app (assembled into WhatsMyUsage.app by
 //                  Scripts/make-app-bundle.sh; no Xcode project)
+//   whatsmyusage — read-only CLI over usage-log.sqlite (no Keychain, no network)
 //
 // Everything that can be tested lives in UsageBarCore. The app stays thin so
 // `swift test` covers the behaviour that decides what the bar shows.
@@ -15,6 +16,7 @@ let package = Package(
     products: [
         .library(name: "UsageBarCore", targets: ["UsageBarCore"]),
         .executable(name: "UsageBar", targets: ["UsageBarApp"]),
+        .executable(name: "whatsmyusage", targets: ["WhatsMyUsageCLI"]),
     ],
     dependencies: [
         // Swift Testing ships inside Xcode, but not the standalone Command Line
@@ -25,6 +27,7 @@ let package = Package(
     targets: [
         .target(name: "UsageBarCore"),
         .executableTarget(name: "UsageBarApp", dependencies: ["UsageBarCore"]),
+        .executableTarget(name: "WhatsMyUsageCLI", dependencies: ["UsageBarCore"]),
         .testTarget(
             name: "UsageBarCoreTests",
             dependencies: [

@@ -42,6 +42,10 @@ Scripts/make-app-bundle.sh        # → .build/WhatsMyUsage.app
 open ".build/WhatsMyUsage.app"
 ```
 
+`Scripts/make-app-bundle.sh` also builds the `whatsmyusage` CLI into the
+bundle and copies it to `~/.local/bin/whatsmyusage`, so agents can run
+`whatsmyusage status --json` without a path.
+
 Without `USAGE_BAR_SIGN_IDENTITY` the bundle is ad-hoc signed. That identity
 is the binary hash, so Keychain treats every rebuild as a new app and prompts
 again. A named certificate stays put:
@@ -88,6 +92,23 @@ time until reset, and rename.
 | ⌘Q | Quit |
 
 It also refreshes every five minutes on its own.
+
+## CLI
+
+`whatsmyusage` reads only `~/Library/Application Support/WhatsMyUsage/usage-log.sqlite`.
+It does not touch the network or the Keychain, so it is only as fresh as the
+running app. Every command prints `observedAt`. A reading older than five
+minutes plus 90 seconds is `unknown` — never an old number presented as current.
+
+```
+whatsmyusage status --json
+whatsmyusage pick [--provider claude]
+whatsmyusage achievements --json
+```
+
+`pick` exits 0 when an account still has room and 1 when every account is
+blocked or stale (stdout then carries the earliest `resetsAt`). JSON keys are
+the model names: `trackingID`, `limitID`, `utilization`, `resetsAt`.
 
 ## Core
 
