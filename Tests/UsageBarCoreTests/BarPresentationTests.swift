@@ -17,7 +17,7 @@ struct BarPresentationTests {
 
         let bar = BarPresentation.of(outcomes: [claude, grok])
         #expect(bar.title == "100%")
-        #expect(bar.tone == .critical)
+        #expect(bar.tone == .blocked)
         #expect(bar.worst?.id == "weekly_all")
         #expect(bar.provider == .claude)
     }
@@ -54,12 +54,31 @@ struct BarPresentationTests {
         #expect(bar.tone == .ok)
     }
 
-    @Test func chatGPTLockPaintsCriticalEvenBelowNinety() {
+    /// The step that matters while you work: 95 % still has room, 100 % does not.
+    /// They shared one colour, so the bar could not answer "keep going or switch?".
+    @Test func theWallHasItsOwnStepAboveNinetyFive() {
+        func tone(_ utilization: Double, locked: LockState = .unknown) -> BarTone {
+            BarPresentation.tone(of: Limit(
+                id: "w", label: "Week", utilization: utilization,
+                resetsAt: nil, locked: locked, scope: .account
+            ))
+        }
+        #expect(tone(0.69) == .ok)
+        #expect(tone(0.70) == .warning)
+        #expect(tone(0.89) == .warning)
+        #expect(tone(0.90) == .critical)
+        #expect(tone(0.95) == .critical)
+        // Claude never sends a lock state, so full alone has to mean blocked.
+        #expect(tone(1.0) == .blocked)
+        #expect(tone(0.4, locked: .locked) == .blocked)
+    }
+
+    @Test func chatGPTLockPaintsBlockedEvenBelowNinety() {
         let snap = UsageOutcome.snapshot(UsageSnapshot(provider: .chatGPT, limits: [
             Limit(id: "primary", label: "Week", utilization: 0.5, resetsAt: nil, locked: .locked, scope: .account),
         ]))
         let bar = BarPresentation.of(outcomes: [snap])
-        #expect(bar.tone == .critical)
+        #expect(bar.tone == .blocked)
         #expect(bar.title == "50%")
     }
 
@@ -76,7 +95,7 @@ struct BarPresentationTests {
         for outcomes in [[claude, chatGPT], [chatGPT, claude]] {
             let bar = BarPresentation.of(outcomes: outcomes)
             #expect(bar.title == "40%")
-            #expect(bar.tone == .critical)
+            #expect(bar.tone == .blocked)
             #expect(bar.provider == .chatGPT)
             #expect(bar.worst?.locked == .locked)
         }
@@ -163,11 +182,11 @@ struct BarPresentationTests {
 
         let bar = BarPresentation.of(outcomes: [claude, chatGPT, grok])
         #expect(bar.segments.map(\.provider) == [.claude, .chatGPT, .grok])
-        #expect(bar.segments.map(\.tone) == [.ok, .critical, .ok])
+        #expect(bar.segments.map(\.tone) == [.ok, .blocked, .ok])
         #expect(bar.segments[0].name == "Org A")
         // Dominant title stays the worst reading — the pill is the segments.
         #expect(bar.title == "100%")
-        #expect(bar.tone == .critical)
+        #expect(bar.tone == .blocked)
     }
 
     @Test func twoClaudeOrgsAreTwoSegments() {
@@ -405,7 +424,7 @@ struct BarPresentationTests {
         for cards in [[ok, locked], [locked, ok]] {
             let bar = BarPresentation.showing(cards)
             #expect(bar.title == "100%")
-            #expect(bar.tone == .critical)
+            #expect(bar.tone == .blocked)
             #expect(bar.worst?.locked == .locked)
             #expect(bar.provider == .chatGPT)
             #expect(bar.segments.count == 2)
@@ -435,5 +454,118 @@ struct BarPresentationTests {
         #expect(prefs.accountOrder == ["claude:a", "chatGPT"])
         prefs.move(from: IndexSet(integer: 0), to: 2, among: [a, b])
         #expect(prefs.accountOrder == ["chatGPT", "claude:a"])
+    }
+
+    // MARK: - Compact pill
+
+    private func card(
+        _ id: String,
+        _ provider: Provider,
+        _ limits: [Limit]
+    ) -> AccountCard {
+        let worst = limits.filter { $0.scope == .account }.max(by: Limit.isLessUrgent)
+        return AccountCard(
+            trackingID: id,
+            provider: provider,
+            defaultName: id,
+            limits: limits,
+            tone: worst.map(BarPresentation.tone(of:)) ?? .idle,
+            utilization: worst?.utilization
+        )
+    }
+
+    private func limit(
+        _ id: String,
+        _ utilization: Double,
+        resetsIn seconds: TimeInterval?,
+        locked: LockState = .unknown,
+        scope: LimitScope = .account
+    ) -> Limit {
+        Limit(
+            id: id,
+            label: id,
+            utilization: utilization,
+            resetsAt: seconds.map { Date(timeIntervalSince1970: 1_800_000_000 + $0) },
+            locked: locked,
+            scope: scope
+        )
+    }
+
+    @Test func shortestWindowIsTheLimitThatComesBackSoonest() {
+        let a = card("a", .claude, [
+            limit("week", 0.8, resetsIn: 7 * 24 * 3600),
+            limit("session", 0.2, resetsIn: 3600),
+        ])
+        let b = card("b", .grok, [
+            limit("week", 0.6, resetsIn: 3 * 24 * 3600),
+        ])
+        #expect(BarPresentation.shortestWindowLimits([a, b]).map(\.id) == ["session", "week"])
+        // (0.2 + 0.6) / 2
+        #expect(BarPresentation.averageOfShortestWindows([a, b]) == 0.4)
+    }
+
+    @Test func shortestWindowIgnoresModelScopedLimits() {
+        let a = card("a", .claude, [
+            limit("fable", 1, resetsIn: 60, scope: .model),
+            limit("session", 0.1, resetsIn: 3600),
+        ])
+        #expect(BarPresentation.shortestWindowLimits([a]).map(\.id) == ["session"])
+    }
+
+    @Test func compactPillPaintsOneSlotFromTheAverage() {
+        let a = card("a", .claude, [limit("session", 1, resetsIn: 3600)])
+        let b = card("b", .grok, [limit("fast", 0.5, resetsIn: 1800)])
+        let bar = BarPresentation.showing([a, b], pill: .compact)
+        #expect(bar.segments.count == 1)
+        #expect(bar.segments.first?.utilization == 0.75)
+        #expect(bar.segments.first?.tone == .warning)
+        // The popover is unaffected — both accounts stay.
+        #expect(bar.cards.count == 2)
+        #expect(BarPresentation.showing([a, b]).segments.count == 2)
+    }
+
+    @Test func compactPillStaysRedWhileOneAccountIsLocked() {
+        let locked = card("a", .grok, [limit("fast", 1, resetsIn: 600, locked: .locked)])
+        let idle = card("b", .claude, [limit("session", 0, resetsIn: 600)])
+        let bar = BarPresentation.showing([locked, idle], pill: .compact)
+        // The average alone would be 50 % and paint green over blocked work.
+        #expect(bar.segments.first?.tone == .blocked)
+        #expect(bar.segments.first?.utilization == 0.5)
+    }
+
+    @Test func compactPillSeesALockOutsideTheShortestWindow() {
+        // Grok's week can be locked while its two-hour window is half empty.
+        let grok = card("a", .grok, [
+            limit("fast", 0.5, resetsIn: 1800),
+            limit("week", 1, resetsIn: 5 * 24 * 3600, locked: .locked),
+        ])
+        let bar = BarPresentation.showing([grok], pill: .compact)
+        #expect(BarPresentation.shortestWindowLimits([grok]).map(\.id) == ["fast"])
+        #expect(bar.segments.first?.utilization == 0.5)
+        #expect(bar.segments.first?.tone == .blocked)
+    }
+
+    @Test func compactPillKeepsAFailureVisibleWithoutAnyReading() {
+        let expired = AccountCard(
+            trackingID: "claude",
+            provider: .claude,
+            defaultName: "Claude",
+            limits: [],
+            tone: .expired,
+            utilization: nil,
+            message: "Sign-in expired"
+        )
+        let bar = BarPresentation.showing([expired], pill: .compact)
+        #expect(bar.segments.count == 1)
+        #expect(bar.segments.first?.tone == .expired)
+        #expect(bar.segments.first?.utilization == nil)
+    }
+
+    @Test func compactPillHasNoSlotWithoutAccounts() {
+        #expect(BarPresentation.compactSegment([]) == nil)
+    }
+
+    @Test func pillStyleDefaultsToOneSlotPerAccount() {
+        #expect(DisplayPreferences().pill == .perAccount)
     }
 }

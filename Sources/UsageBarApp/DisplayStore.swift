@@ -39,12 +39,14 @@ enum DisplayStore {
     private static let hiddenLimitsKey = "hiddenLimitKeys"
     private static let hiddenAccountsKey = "hiddenAccountIDs"
     private static let orderKey = "accountOrder"
+    private static let pillKey = "pillStyle"
 
     static func load() -> DisplayPreferences {
         DisplayPreferences(
             hiddenLimitKeys: Set(UserDefaults.standard.stringArray(forKey: hiddenLimitsKey) ?? []),
             hiddenAccountIDs: Set(UserDefaults.standard.stringArray(forKey: hiddenAccountsKey) ?? []),
-            accountOrder: UserDefaults.standard.stringArray(forKey: orderKey) ?? []
+            accountOrder: UserDefaults.standard.stringArray(forKey: orderKey) ?? [],
+            pill: UserDefaults.standard.string(forKey: pillKey).flatMap(PillStyle.init(rawValue:)) ?? .perAccount
         )
     }
 
@@ -52,5 +54,6 @@ enum DisplayStore {
         UserDefaults.standard.set(Array(prefs.hiddenLimitKeys).sorted(), forKey: hiddenLimitsKey)
         UserDefaults.standard.set(Array(prefs.hiddenAccountIDs).sorted(), forKey: hiddenAccountsKey)
         UserDefaults.standard.set(prefs.accountOrder, forKey: orderKey)
+        UserDefaults.standard.set(prefs.pill.rawValue, forKey: pillKey)
     }
 }

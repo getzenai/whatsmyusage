@@ -1,43 +1,62 @@
 import SwiftUI
 import UsageBarCore
 
+/// What the popover shows right now. The view observes this instead of being rebuilt:
+/// a fresh `NSHostingController` reports its height only after layout, and a refresh
+/// used to collapse the open popover to a stub in the meantime.
+@MainActor
+final class PopoverModel: ObservableObject {
+    @Published var cards: [AccountCard] = []
+    @Published var waits: [Achievements.CurrentWait] = []
+    @Published var hasAchievements = false
+}
+
+/// What a click in the popover does. Held by the controller, not the view.
+struct PopoverActions {
+    var rename: (String, String) -> Void
+    var refresh: () -> Void
+    var openSettings: () -> Void
+    var openAchievements: () -> Void
+    var quit: () -> Void
+}
+
 /// Popover body. Custom views — not disabled menu rows — so the type stays readable.
 struct UsagePopoverView: View {
-    let cards: [AccountCard]
-    var history: PopoverHistory = .none
-    var onRename: (String, String) -> Void
-    var onRefresh: () -> Void
-    var onCookies: () -> Void
-    var onQuit: () -> Void
+    @ObservedObject var model: PopoverModel
+    let actions: PopoverActions
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            if cards.isEmpty {
+            if model.cards.isEmpty {
                 Text("No account — open Settings to paste cookies.")
                     .font(.system(size: 13))
                     .foregroundStyle(.primary)
                     .padding(16)
             } else {
-                ForEach(Array(cards.enumerated()), id: \.element.id) { index, card in
+                ForEach(Array(model.cards.enumerated()), id: \.element.id) { index, card in
                     if index > 0 { Divider().opacity(0.35) }
-                    AccountCardView(card: card, onRename: onRename)
+                    AccountCardView(card: card, waits: model.waits, onRename: actions.rename)
                 }
-            }
-
-            if !history.isEmpty {
-                Divider().opacity(0.35)
-                HistorySection(history: history)
             }
 
             Divider().opacity(0.35)
             HStack(spacing: 12) {
-                Button("Refresh", action: onRefresh)
-                Button("Settings…", action: onCookies)
+                Button("Refresh", action: actions.refresh)
+                Button("Settings…", action: actions.openSettings)
+                if model.hasAchievements {
+                    // An icon, not a section: the badges are the fun part, not the point.
+                    Button(action: actions.openAchievements) {
+                        Image(systemName: "trophy")
+                            .font(.system(size: 12))
+                    }
+                    .help("Achievements")
+                    .accessibilityLabel("Achievements")
+                }
                 Spacer()
                 Text(AppVersion.label)
                     .font(.system(size: 11).monospacedDigit())
                     .foregroundStyle(.tertiary)
-                Button("Quit", action: onQuit)
+                Button("Quit", action: actions.quit)
             }
             .buttonStyle(.borderless)
             .foregroundStyle(.primary)
@@ -51,6 +70,7 @@ struct UsagePopoverView: View {
 
 private struct AccountCardView: View {
     let card: AccountCard
+    let waits: [Achievements.CurrentWait]
     var onRename: (String, String) -> Void
 
     @State private var editing = false
@@ -93,11 +113,16 @@ private struct AccountCardView: View {
             }
 
             ForEach(card.limits) { limit in
-                LimitRow(limit: limit)
+                LimitRow(limit: limit, wait: wait(for: limit))
             }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
+    }
+
+    /// The wait belongs to the limit it is about — on its own it read like a badge.
+    private func wait(for limit: Limit) -> Achievements.CurrentWait? {
+        waits.first { $0.trackingID == card.trackingID && $0.limitID == limit.id }
     }
 
     private func beginEdit() {
@@ -115,6 +140,7 @@ private struct AccountCardView: View {
 
 private struct LimitRow: View {
     let limit: Limit
+    var wait: Achievements.CurrentWait?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
@@ -144,99 +170,33 @@ private struct LimitRow: View {
             }
             .frame(height: 5)
 
-            if let reset = limit.resetsAt {
-                Text("resets \(ResetFormatting.remaining(until: reset))")
+            if let footnote {
+                Text(footnote)
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }
         }
     }
 
+    /// Reset time and, when this limit is the one holding you up, how long it has.
+    /// The measured wait, not now − since: the last reading is the last thing we know.
+    private var footnote: String? {
+        let reset = limit.resetsAt.map { "resets \(ResetFormatting.remaining(until: $0))" }
+        let waiting = wait.map { "full for \($0.duration.hoursAndMinutes)" }
+        return [reset, waiting].compactMap { $0 }.joined(separator: " · ").nilIfEmpty
+    }
+
     private var barColor: Color {
         switch BarPresentation.tone(of: limit) {
-        case .critical: return .red
-        case .warning: return .orange
+        case .blocked: return .red
+        case .critical: return .orange
+        case .warning: return .yellow
         case .ok: return .green
         default: return .gray
         }
     }
 }
 
-/// The past, under the accounts: what you are waiting on, and the badges the log
-/// earned. Collapsed by default — this is the fun part, not the point of the app.
-private struct HistorySection: View {
-    let history: PopoverHistory
-    @AppStorage("showAchievements") private var expanded = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ForEach(history.waits) { wait in
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text("Waiting")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                    // The measured wait, not now − since: the last reading is the last
-                    // thing we know. Inventing the minutes since would be guessing.
-                    Text(wait.duration.hoursAndMinutes)
-                        .font(.system(size: 12, weight: .semibold).monospacedDigit())
-                        .foregroundStyle(.primary)
-                    Text("for \(wait.label)")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                    Spacer(minLength: 8)
-                }
-            }
-
-            if !history.achievements.isEmpty {
-                Button {
-                    expanded.toggle()
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: expanded ? "chevron.down" : "chevron.right")
-                            .font(.system(size: 9, weight: .semibold))
-                        Text("Achievements")
-                            .font(.system(size: 12, weight: .medium))
-                        Text("\(history.earnedCount)/\(history.achievements.count)")
-                            .font(.system(size: 11).monospacedDigit())
-                            .foregroundStyle(.secondary)
-                        Spacer(minLength: 8)
-                    }
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.primary)
-
-                if expanded {
-                    ForEach(history.achievements) { achievement in
-                        AchievementRow(achievement: achievement)
-                    }
-                }
-            }
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-    }
-}
-
-private struct AchievementRow: View {
-    let achievement: Achievements.Achievement
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: achievement.isEarned ? "checkmark.seal.fill" : "lock")
-                .font(.system(size: 11))
-                .foregroundStyle(achievement.isEarned ? Color.accentColor : Color.secondary)
-                .frame(width: 14)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(achievement.title)
-                    .font(.system(size: 12, weight: achievement.isEarned ? .medium : .regular))
-                // Locked badges show what it takes; earned ones show the measured fact.
-                Text(achievement.detail)
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-            }
-            Spacer(minLength: 8)
-        }
-        .foregroundStyle(achievement.isEarned ? .primary : .secondary)
-    }
+private extension String {
+    var nilIfEmpty: String? { isEmpty ? nil : self }
 }
