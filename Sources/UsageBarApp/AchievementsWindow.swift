@@ -34,6 +34,14 @@ struct AchievementsView: View {
 
     private var earned: Int { achievements.filter(\.isEarned).count }
 
+    /// Empty sections stay out until they have a badge. PR 2 will fill the rest.
+    private var grouped: [(section: Achievements.Section, items: [Achievements.Achievement])] {
+        Achievements.Section.allCases.compactMap { section in
+            let items = achievements.filter { $0.kind.section == section }
+            return items.isEmpty ? nil : (section, items)
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 6) {
@@ -50,9 +58,16 @@ struct AchievementsView: View {
             Divider().opacity(0.35)
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
-                    ForEach(achievements) { achievement in
-                        AchievementRow(achievement: achievement)
+                VStack(alignment: .leading, spacing: 18) {
+                    ForEach(grouped, id: \.section) { group in
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text(group.section.rawValue)
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                            ForEach(group.items) { achievement in
+                                AchievementRow(achievement: achievement)
+                            }
+                        }
                     }
                 }
                 .padding(18)
