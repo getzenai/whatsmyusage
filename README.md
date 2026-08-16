@@ -155,6 +155,11 @@ credits call locks only at 100 %.
 One translator per provider. Claude never invents a lock state. ChatGPT takes `allowed`.
 Grok infers locked from `remainingQueries == 0`.
 
+## Website
+
+Static landing page in [`site/`](site/). Push to `main` deploys it to
+[whatsmyusage.com](https://whatsmyusage.com) via GitHub Actions → Cloudflare Pages.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
