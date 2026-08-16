@@ -107,8 +107,18 @@ whatsmyusage achievements --json
 ```
 
 `pick` exits 0 when an account still has room and 1 when every account is
-blocked or stale (stdout then carries the earliest `resetsAt`). JSON keys are
-the model names: `trackingID`, `limitID`, `utilization`, `resetsAt`.
+blocked or stale (stdout then carries the earliest `resetsAt`). A full
+model-scoped limit (Fable, Opus, …) blocks the account even when `weekly_all`
+has room; the reported `utilization` is still the worst *account* limit.
+JSON keys are the model names: `trackingID`, `limitID`, `utilization`, `resetsAt`.
+
+`locked` is what the provider sent. Claude never sends one — every Claude
+limit is `unknown`, including a 100 % week. `is_active` on the Claude
+response is not a lock (a model limit at 24 % has been seen `is_active:
+true` while `weekly_all` sat at 14 %). Read `utilization` (and `pick`'s
+exit code) to decide whether the account is usable. ChatGPT sends
+`allowed`. Grok's 2-hour window locks at remaining zero; the weekly
+credits call locks only at 100 %.
 
 ## Core
 

@@ -118,17 +118,26 @@ public enum UsageQuery {
         var blockedResets: [Date] = []
 
         for account in accounts {
-            let accountLimits = account.limits.filter { $0.scope == .account }
-            let fresh = accountLimits.filter { $0.utilization != nil && $0.locked != nil }
+            let fresh = account.limits.filter { $0.utilization != nil && $0.locked != nil }
             guard !fresh.isEmpty else { continue }
 
-            let worst = fresh.max { lhs, rhs in
-                Limit.isLessUrgent(limit(from: lhs), limit(from: rhs))
-            }!
-            if isBlocked(worst) {
-                if let resetsAt = worst.resetsAt { blockedResets.append(resetsAt) }
+            // A full Fable week still blocks Fable work, even when weekly_all
+            // has room. Conservative: any fresh limit that is full or locked
+            // makes the account unusable. The number we report stays the
+            // account-scoped worst — that is "how full is the subscription".
+            let blocked = fresh.filter(isBlocked)
+            if !blocked.isEmpty {
+                if let opensAt = blocked.compactMap(\.resetsAt).max() {
+                    blockedResets.append(opensAt)
+                }
                 continue
             }
+
+            let accountLimits = fresh.filter { $0.scope == .account }
+            guard !accountLimits.isEmpty else { continue }
+            let worst = accountLimits.max { lhs, rhs in
+                Limit.isLessUrgent(limit(from: lhs), limit(from: rhs))
+            }!
             usable.append((
                 trackingID: account.trackingID,
                 provider: account.provider,

@@ -136,8 +136,9 @@ struct UsageQueryTests {
         #expect(picked.utilization == nil)
     }
 
-    @Test func aFullModelLimitDoesNotBlockTheAccount() {
+    @Test func aFullModelLimitBlocksEvenWhenTheAccountHasRoom() {
         let now = origin
+        let soon = now.addingTimeInterval(3600)
         let latest = [
             row(trackingID: "acct-1", limitID: "weekly_all", utilization: 0.2, now: now),
             row(
@@ -145,12 +146,52 @@ struct UsageQueryTests {
                 limitID: "weekly_opus",
                 utilization: 1,
                 scope: .model,
+                resetsAt: soon,
+                now: now
+            ),
+        ]
+        let picked = UsageQuery.pick(from: latest, now: now)
+        #expect(!picked.found)
+        #expect(picked.resetsAt == soon)
+    }
+
+    @Test func pickKeepsAccountUtilizationWhenAModelLimitIsHighButOpen() {
+        let now = origin
+        let latest = [
+            row(trackingID: "acct-1", limitID: "weekly_all", utilization: 0.2, now: now),
+            row(
+                trackingID: "acct-1",
+                limitID: "weekly_opus",
+                utilization: 0.9,
+                scope: .model,
                 now: now
             ),
         ]
         let picked = UsageQuery.pick(from: latest, now: now)
         #expect(picked.trackingID == "acct-1")
         #expect(picked.utilization == 0.2)
+    }
+
+    @Test func pickPrefersATighterOpenAccountOverOneWithAFullModel() {
+        let now = origin
+        let airButFableFull = [
+            row(trackingID: "fable-full", limitID: "weekly_all", utilization: 0.1, now: now),
+            row(
+                trackingID: "fable-full",
+                limitID: "weekly_scoped:Fable",
+                utilization: 1,
+                scope: .model,
+                now: now
+            ),
+        ]
+        let tighterButOpen = [
+            row(trackingID: "open", limitID: "weekly_all", utilization: 0.4, now: now),
+        ]
+        let forward = UsageQuery.pick(from: airButFableFull + tighterButOpen, now: now)
+        let reverse = UsageQuery.pick(from: tighterButOpen + airButFableFull, now: now)
+        #expect(forward.trackingID == "open")
+        #expect(reverse.trackingID == "open")
+        #expect(forward.utilization == 0.4)
     }
 
     @Test func pickRestrictedToAProviderIgnoresTheOthers() {

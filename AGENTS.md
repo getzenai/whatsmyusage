@@ -35,7 +35,9 @@ Read `README.md` and `docs/` before changing parsers or cookie handling.
   the identical readings in between are not kept, so that one collapses to zero.
 - The `whatsmyusage` CLI reads only `usage-log.sqlite`. No network, no Keychain, no
   cookies. A number older than one refresh (5 min) plus 90 s is `null` / "unknown",
-  never a current value — same rule as the pill (spec 18, 20, 25).
+  never a current value — same rule as the pill (spec 18, 20, 25). `pick` treats a
+  full model-scoped limit as blocking; the number it reports is still the
+  account-scoped worst. Claude `locked` stays `unknown` — do not invent it.
 - Do not hardcode limit names the provider invents. Claude's `limits[]` grows
   new `kind` values; unknown ones pass through.
 
