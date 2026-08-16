@@ -140,3 +140,7 @@ credits call locks only at 100 %.
 
 One translator per provider. Claude never invents a lock state. ChatGPT takes `allowed`.
 Grok infers locked from `remainingQueries == 0`.
+
+## License
+
+MIT — see [LICENSE](LICENSE).

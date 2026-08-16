@@ -9,6 +9,14 @@ public enum BarTone: String, Sendable, Equatable {
     case error
 }
 
+/// How many slots the menu-bar pill paints.
+public enum PillStyle: String, Sendable, Equatable, CaseIterable {
+    /// One slot per account, in the order Settings sets.
+    case perAccount
+    /// A single slot for every account at once.
+    case compact
+}
+
 /// One slot in the menu-bar pill. One tracking, one colour.
 public struct BarSegment: Equatable, Sendable, Identifiable {
     public var id: String { trackingID }
@@ -212,25 +220,93 @@ public struct BarPresentation: Equatable, Sendable {
 
     /// Pick the worst *account-scoped* limit across every successful snapshot.
     /// Expired or untrackable providers do not hide a real reading from another one.
-    public static func of(outcomes: [UsageOutcome]) -> BarPresentation {
-        of(cards: cards(from: outcomes), outcomes: outcomes)
+    public static func of(outcomes: [UsageOutcome], pill: PillStyle = .perAccount) -> BarPresentation {
+        of(cards: cards(from: outcomes), outcomes: outcomes, pill: pill)
     }
 
-    public static func of(byProvider: [Provider: [UsageOutcome]]) -> BarPresentation {
+    public static func of(byProvider: [Provider: [UsageOutcome]], pill: PillStyle = .perAccount) -> BarPresentation {
         let flat = Provider.allCases.flatMap { byProvider[$0] ?? [] }
-        return of(cards: cards(byProvider: byProvider), outcomes: flat)
+        return of(cards: cards(byProvider: byProvider), outcomes: flat, pill: pill)
     }
 
     /// Already-filtered cards (hidden limits removed, order applied).
     /// Worst, tone, and title come from the cards — not from a second copy of
     /// the outcomes. Empty outcomes here used to paint "idle" while two
     /// accounts were locked.
-    public static func showing(_ cards: [AccountCard]) -> BarPresentation {
-        of(cards: cards, outcomes: [])
+    public static func showing(_ cards: [AccountCard], pill: PillStyle = .perAccount) -> BarPresentation {
+        of(cards: cards, outcomes: [], pill: pill)
     }
 
-    private static func of(cards: [AccountCard], outcomes: [UsageOutcome]) -> BarPresentation {
-        let segments = cards.map(\.segment)
+    /// Per account, the limit that comes back soonest. The model carries no window
+    /// length, only a reset time, so "shortest window" means "next to reset" —
+    /// a session limit outranks a week for as long as the week is further away.
+    /// Model-scoped limits stay out, as everywhere else.
+    public static func shortestWindowLimits(_ cards: [AccountCard]) -> [Limit] {
+        cards.compactMap { card in
+            card.limits
+                .filter { $0.scope == .account }
+                .min(by: comesBackSooner)
+        }
+    }
+
+    /// What the compact pill measures: the mean of those limits. Nil when no account
+    /// has a usable reading — an average over nothing would paint a colour from air.
+    public static func averageOfShortestWindows(_ cards: [AccountCard]) -> Double? {
+        let limits = shortestWindowLimits(cards)
+        guard !limits.isEmpty else { return nil }
+        return limits.reduce(0) { $0 + $1.utilization } / Double(limits.count)
+    }
+
+    /// The single slot of the compact pill, or nil when there is nothing to show.
+    public static func compactSegment(_ cards: [AccountCard]) -> BarSegment? {
+        guard let first = cards.first else { return nil }
+        let limits = shortestWindowLimits(cards)
+        guard let average = averageOfShortestWindows(cards) else {
+            // No reading anywhere: keep the failure visible instead of a green slot.
+            let tone: BarTone = cards.contains { $0.tone == .expired } ? .expired
+                : cards.contains { $0.tone == .error } ? .error
+                : .idle
+            return BarSegment(
+                trackingID: compactTrackingID,
+                provider: first.provider,
+                name: compactName,
+                utilization: nil,
+                tone: tone
+            )
+        }
+        // A lock is blocked work, wherever it sits. Grok's week can be locked while
+        // its two-hour window — the shortest one, the one the average is built
+        // from — is half empty; a green slot would then paint over a wall.
+        let blocked = cards
+            .flatMap(\.limits)
+            .contains { $0.scope == .account && $0.locked == .locked }
+        let tone: BarTone = blocked ? .critical : toneOf(utilization: average)
+        return BarSegment(
+            trackingID: compactTrackingID,
+            provider: first.provider,
+            name: compactName,
+            utilization: average,
+            tone: tone
+        )
+    }
+
+    public static let compactTrackingID = "compact"
+    public static let compactName = "All accounts"
+
+    /// Sooner reset first; undated last; a date tie goes to the fuller limit.
+    private static func comesBackSooner(_ lhs: Limit, _ rhs: Limit) -> Bool {
+        switch (lhs.resetsAt, rhs.resetsAt) {
+        case let (l?, r?) where l != r: return l < r
+        case (nil, _?): return false
+        case (_?, nil): return true
+        default: return lhs.utilization > rhs.utilization
+        }
+    }
+
+    private static func of(cards: [AccountCard], outcomes: [UsageOutcome], pill: PillStyle = .perAccount) -> BarPresentation {
+        let segments = pill == .compact
+            ? [compactSegment(cards)].compactMap { $0 }
+            : cards.map(\.segment)
         let worst = cards
             .flatMap(\.limits)
             .filter { $0.scope == .account }
@@ -284,8 +360,12 @@ public struct BarPresentation: Equatable, Sendable {
 
     public static func tone(of limit: Limit) -> BarTone {
         if limit.locked == .locked { return .critical }
-        if limit.utilization >= 0.9 { return .critical }
-        if limit.utilization >= 0.7 { return .warning }
+        return toneOf(utilization: limit.utilization)
+    }
+
+    public static func toneOf(utilization: Double) -> BarTone {
+        if utilization >= 0.9 { return .critical }
+        if utilization >= 0.7 { return .warning }
         return .ok
     }
 

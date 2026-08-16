@@ -378,12 +378,13 @@ public enum Achievements {
 }
 
 public extension TimeInterval {
-    /// "3 h 05 min", "45 min". Never "0 h".
+    /// "3h 05m", "45m". Never "0h", and never "1h 60m" — the carry happens before
+    /// the split, so 119.6 minutes reads "2h 00m" rather than an hour plus sixty.
     var hoursAndMinutes: String {
         let minutes = Int((self / 60).rounded())
         let hours = minutes / 60
-        guard hours > 0 else { return "\(minutes) min" }
-        return String(format: "%d h %02d min", hours, minutes % 60)
+        guard hours > 0 else { return "\(minutes)m" }
+        return String(format: "%dh %02dm", hours, minutes % 60)
     }
 }
 

@@ -7,12 +7,16 @@ import UsageBarCore
 final class StatusItemController: NSObject, NSPopoverDelegate {
     private let statusItem: NSStatusItem
     private let popover = NSPopover()
+    private let model = PopoverModel()
+    private let achievementsWindow = AchievementsWindowController()
     var onRefresh: (() -> Void)?
     var onOpenSettings: (() -> Void)?
     var onQuit: (() -> Void)?
     var onRename: ((String, String) -> Void)?
     /// Asked for on every popover open, so the badges are as fresh as the log.
     var historyProvider: (() -> PopoverHistory)?
+    /// One slot per account, or one for all of them. Set from the preferences.
+    var pillStyle: PillStyle = .perAccount
 
     private var outcomes: [UsageOutcome] = []
     private var lastError: String?
@@ -24,6 +28,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         popover.behavior = .transient
         popover.animates = false
         popover.delegate = self
+        popover.contentViewController = makeContentController()
         if let button = statusItem.button {
             button.target = self
             button.action = #selector(togglePopover)
@@ -35,19 +40,17 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
 
     func refreshTooltip() {
         if let button = statusItem.button {
-            button.toolTip = tooltip(for: BarPresentation.showing(cards))
+            button.toolTip = tooltip(for: BarPresentation.showing(cards, pill: pillStyle))
         }
     }
 
     func update(outcomes: [UsageOutcome], error: String? = nil) {
         self.outcomes = outcomes
         self.lastError = error
-        let presentation = BarPresentation.of(outcomes: outcomes)
+        let presentation = BarPresentation.of(outcomes: outcomes, pill: pillStyle)
         self.cards = presentation.cards
         render(presentation)
-        if popover.isShown {
-            installPopoverContent()
-        }
+        if popover.isShown { refreshPopoverData() }
     }
 
     func update(byProvider: [Provider: [UsageOutcome]], error: String? = nil) {
@@ -59,10 +62,8 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         self.outcomes = flat
         self.lastError = error
         self.cards = cards
-        render(BarPresentation.showing(cards))
-        if popover.isShown {
-            installPopoverContent()
-        }
+        render(BarPresentation.showing(cards, pill: pillStyle))
+        if popover.isShown { refreshPopoverData() }
     }
 
     private func render(_ bar: BarPresentation) {
@@ -88,41 +89,58 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         tooltip(for: bar)
     }
 
-    private func installPopoverContent() {
+    /// Built once. Replacing it while the popover is open is what collapsed the
+    /// window to a stub on Refresh — the new controller has no measured height yet.
+    private func makeContentController() -> NSViewController {
         let view = UsagePopoverView(
-            cards: cards,
-            history: historyProvider?() ?? .none,
-            onRename: { [weak self] id, name in
-                self?.onRename?(id, name)
-                if self?.popover.isShown == true {
-                    self?.installPopoverContent()
-                }
-            },
-            onRefresh: { [weak self] in self?.onRefresh?() },
-            onCookies: { [weak self] in
-                self?.popover.performClose(nil)
-                self?.onOpenSettings?()
-            },
-            onQuit: { [weak self] in self?.onQuit?() }
+            model: model,
+            actions: PopoverActions(
+                rename: { [weak self] id, name in self?.onRename?(id, name) },
+                refresh: { [weak self] in self?.onRefresh?() },
+                openSettings: { [weak self] in
+                    self?.popover.performClose(nil)
+                    self?.onOpenSettings?()
+                },
+                openAchievements: { [weak self] in
+                    guard let self else { return }
+                    self.popover.performClose(nil)
+                    self.achievementsWindow.show(self.history.achievements)
+                },
+                quit: { [weak self] in self?.onQuit?() }
+            )
         )
         let hosting = NSHostingController(rootView: view)
-        hosting.sizingOptions = [.intrinsicContentSize]
-        popover.contentViewController = hosting
-        var size = hosting.view.fittingSize
-        if size.width < 360 { size.width = 360 }
-        if size.height < 80 { size.height = 220 }
-        popover.contentSize = size
+        // `.preferredContentSize` is the one NSPopover follows. With
+        // `.intrinsicContentSize` the popover keeps AppKit's 320×320 default and
+        // clips the accounts off the bottom.
+        hosting.sizingOptions = [.preferredContentSize]
+        return hosting
+    }
+
+    /// The popover reads the log every time it opens, and again on every refresh
+    /// while it is open, so the waits are as fresh as the numbers above them.
+    private var history: PopoverHistory = .none
+
+    private func refreshPopoverData() {
+        history = historyProvider?() ?? .none
+        model.cards = cards
+        model.waits = history.waits
+        model.hasAchievements = !history.achievements.isEmpty
+    }
+
+    func openPopover() {
+        guard let button = statusItem.button, !popover.isShown else { return }
+        refreshPopoverData()
+        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     @objc private func togglePopover() {
-        guard let button = statusItem.button else { return }
         if popover.isShown {
             popover.performClose(nil)
             return
         }
-        installPopoverContent()
-        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-        NSApp.activate(ignoringOtherApps: true)
+        openPopover()
     }
 }
 
