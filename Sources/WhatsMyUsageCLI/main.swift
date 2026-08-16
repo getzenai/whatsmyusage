@@ -31,12 +31,6 @@ enum WhatsMyUsageCLI {
 
     private static func runStatus(json: Bool, limits: Bool, logURL: URL?, printUsage: Bool) throws {
         let opened = try openLatest(logURL)
-        if opened.latest.isEmpty {
-            throw CLIError(
-                "no readings in the log — is WhatsMyUsage running and refreshed?",
-                exitCode: 2
-            )
-        }
         let now = Date()
         let status = UsageQuery.status(from: opened.latest, now: now)
         if json {
@@ -109,6 +103,12 @@ enum WhatsMyUsageCLI {
             latest = try log.latestBySeries()
         } catch {
             throw CLIError("cannot read usage log: \(error)", exitCode: 2)
+        }
+        if latest.isEmpty {
+            throw CLIError(
+                "no readings in the log — is WhatsMyUsage running and refreshed?",
+                exitCode: 2
+            )
         }
         return (log, latest, url)
     }
