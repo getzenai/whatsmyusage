@@ -1,4 +1,5 @@
 import Foundation
+import UsageBarCore
 
 /// Local display names. Cookies stay in the Keychain; names are not secret.
 enum AccountNames {
@@ -23,6 +24,15 @@ enum AccountNames {
 
     static func all() -> [String: String] {
         stored()
+    }
+
+    /// So the CLI can print the onboarding name without reading the log.
+    static func persistDefaultNames(_ cards: [AccountCard]) {
+        var map: [String: String] = [:]
+        for card in cards {
+            map[card.trackingID] = card.defaultName
+        }
+        UserDefaults.standard.set(map, forKey: AccountDisplayNames.defaultKey)
     }
 
     /// Copy a custom name onto the new tracking id after a storage upgrade.

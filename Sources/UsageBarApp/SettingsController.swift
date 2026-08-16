@@ -138,6 +138,9 @@ final class SettingsController: NSObject, NSWindowDelegate {
                 }
                 self?.model.step = .paste
                 self?.syncRoot()
+            },
+            setPill: { [weak self] style in
+                self?.mutatePrefs { $0.pill = style }
             }
         )
     }
@@ -302,6 +305,7 @@ struct OnboardingActions {
     var cancelDelete: () -> Void
     var rename: (String, String) -> Void
     var welcomeContinued: () -> Void
+    var setPill: (PillStyle) -> Void
 }
 
 struct OnboardingRoot: View {
@@ -434,6 +438,7 @@ struct OnboardingRoot: View {
                 .scrollContentBackground(.hidden)
                 .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
             }
+            pillPicker
             Spacer(minLength: 0)
         }
         .alert("Remove this login?", isPresented: $model.showingDeleteConfirm) {
@@ -441,6 +446,23 @@ struct OnboardingRoot: View {
             Button("Cancel", role: .cancel, action: actions.cancelDelete)
         } message: {
             Text(model.pendingDeleteMessage)
+        }
+    }
+
+    private var pillPicker: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Toggle(isOn: Binding(
+                get: { model.prefs.pill == .compact },
+                set: { actions.setPill($0 ? .compact : .perAccount) }
+            )) {
+                Text("Small pill — one slot for all accounts")
+                    .font(.system(size: 13))
+            }
+            .toggleStyle(.checkbox)
+            Text("The colour is the average of the limit each account gets back soonest — its shortest window. The popover still lists every account.")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 

@@ -84,7 +84,14 @@ struct AchievementsTests {
         ]]
         let wait = earned(Achievements.evaluate(series: series, observedDays: [], calendar: utc), .longestWait)
         #expect(wait.isEarned)
-        #expect(wait.detail == "4 h 00 min waiting on Week.")
+        #expect(wait.detail == "4h 00m waiting on Week.")
+    }
+
+    @Test func aDurationNeverReadsSixtyMinutes() {
+        #expect(TimeInterval(45 * 60).hoursAndMinutes == "45m")
+        #expect(TimeInterval(3 * 3600 + 5 * 60).hoursAndMinutes == "3h 05m")
+        // 119.6 min: rounding must carry into the hour, not print "1h 60m".
+        #expect(TimeInterval(119.6 * 60).hoursAndMinutes == "2h 00m")
     }
 
     @Test func aShortBlockIsNotAWait() {

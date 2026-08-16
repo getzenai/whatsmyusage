@@ -6,15 +6,19 @@ public struct DisplayPreferences: Equatable, Sendable {
     public var hiddenLimitKeys: Set<String>
     public var hiddenAccountIDs: Set<String>
     public var accountOrder: [String]
+    /// One slot for everything instead of one per account. The popover is unaffected.
+    public var pill: PillStyle
 
     public init(
         hiddenLimitKeys: Set<String> = [],
         hiddenAccountIDs: Set<String> = [],
-        accountOrder: [String] = []
+        accountOrder: [String] = [],
+        pill: PillStyle = .perAccount
     ) {
         self.hiddenLimitKeys = hiddenLimitKeys
         self.hiddenAccountIDs = hiddenAccountIDs
         self.accountOrder = accountOrder
+        self.pill = pill
     }
 
     public static func limitKey(trackingID: String, limitID: String) -> String {
@@ -75,6 +79,51 @@ public struct DisplayPreferences: Equatable, Sendable {
             return card.displaying(limits: limits)
         }
         return ordered(visible)
+    }
+
+    public static func load(from defaults: UserDefaults) -> DisplayPreferences {
+        DisplayPreferences(
+            hiddenLimitKeys: Set(defaults.stringArray(forKey: "hiddenLimitKeys") ?? []),
+            hiddenAccountIDs: Set(defaults.stringArray(forKey: "hiddenAccountIDs") ?? []),
+            accountOrder: defaults.stringArray(forKey: "accountOrder") ?? []
+        )
+    }
+
+    public static func loadFromAppSuite() -> DisplayPreferences {
+        guard let defaults = UserDefaults(suiteName: AccountDisplayNames.suiteName) else {
+            return DisplayPreferences()
+        }
+        return load(from: defaults)
+    }
+
+    /// Text form only. `pick` and `--json` keep every row.
+    public func applied(to status: UsageQuery.Status) -> UsageQuery.Status {
+        let visible = status.accounts.compactMap { account -> UsageQuery.AccountStatus? in
+            guard isAccountVisible(account.trackingID) else { return nil }
+            let limits = account.limits.filter {
+                isLimitVisible(trackingID: account.trackingID, limitID: $0.limitID)
+            }
+            guard !limits.isEmpty else { return nil }
+            return UsageQuery.AccountStatus(
+                trackingID: account.trackingID,
+                provider: account.provider,
+                observedAt: account.observedAt,
+                limits: limits
+            )
+        }
+        return UsageQuery.Status(observedAt: status.observedAt, accounts: ordered(visible))
+    }
+
+    public func ordered(_ accounts: [UsageQuery.AccountStatus]) -> [UsageQuery.AccountStatus] {
+        var rank: [String: Int] = [:]
+        for (index, id) in accountOrder.enumerated() {
+            rank[id] = index
+        }
+        return accounts.enumerated().sorted { lhs, rhs in
+            let left = rank[lhs.element.trackingID] ?? (1_000 + lhs.offset)
+            let right = rank[rhs.element.trackingID] ?? (1_000 + rhs.offset)
+            return left < right
+        }.map(\.element)
     }
 
     public func ordered(_ cards: [AccountCard]) -> [AccountCard] {

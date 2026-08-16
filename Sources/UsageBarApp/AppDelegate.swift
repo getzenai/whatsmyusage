@@ -18,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.onOpenSettings = { [weak self] in self?.settings.show() }
         controller.onQuit = { NSApp.terminate(nil) }
         controller.historyProvider = { [weak self] in self?.usageLog.history() ?? .none }
+        controller.pillStyle = DisplayStore.load().pill
         controller.onRename = { [weak controller] id, name in
             AccountNames.setName(name, for: id)
             controller?.refreshTooltip()
@@ -101,7 +102,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func apply(_ byProvider: [Provider: [UsageOutcome]]) {
         let raw = BarPresentation.cards(byProvider: byProvider)
-        let shown = DisplayStore.load().applied(to: raw)
+        AccountNames.persistDefaultNames(raw)
+        let prefs = DisplayStore.load()
+        statusItem?.pillStyle = prefs.pill
+        let shown = prefs.applied(to: raw)
         statusItem?.update(cards: shown, byProvider: byProvider)
         settings.didRefresh(byProvider: byProvider)
     }
