@@ -301,19 +301,18 @@ public struct BarPresentation: Equatable, Sendable {
                 tone: tone
             )
         }
-        // A lock is blocked work, wherever it sits. Grok's week can be locked while
-        // its two-hour window — the shortest one, the one the average is built
-        // from — is half empty; a green slot would then paint over a wall.
-        let blocked = cards
-            .flatMap(\.limits)
-            .contains { $0.scope == .account && $0.locked == .locked }
-        let tone: BarTone = blocked ? .blocked : toneOf(utilization: average)
+        // The average alone decides the colour — a lock somewhere does not
+        // override it. One slot answers one question, and this one is "how do
+        // my accounts look on average". ChatGPT and Grok send `locked` for
+        // nothing more than a meter that reached 100 %, so letting any lock
+        // paint the slot red made it red almost always, which says nothing.
+        // The 100 % is already in the average; it does not need a second vote.
         return BarSegment(
             trackingID: compactTrackingID,
             provider: first.provider,
             name: compactName,
             utilization: average,
-            tone: tone
+            tone: toneOf(utilization: average)
         )
     }
 

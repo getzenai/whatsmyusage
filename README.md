@@ -100,6 +100,14 @@ A full model limit (for example one Claude model) does not paint
 the slot — it stays in the popover. Click the pill for progress bars, remaining
 time until reset, and rename.
 
+Settings can shrink the pill to a **single slot for all accounts**. Its colour
+comes from the mean utilisation of each account's shortest window, on the same
+scale — nothing else. A lock on one account does not paint it red: ChatGPT and
+Grok send `locked` for a meter that reached 100 % and nothing more, so obeying
+any lock made the one slot red almost always. The 100 % is already in the mean.
+Everything shut therefore still reads red, and one open account among four full
+ones lands in the warning band.
+
 | Key | Action |
 |---|---|
 | ⌘R | Refresh |
