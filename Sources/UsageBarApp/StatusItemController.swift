@@ -179,8 +179,9 @@ enum PillImage {
     private static func color(for tone: BarTone) -> NSColor {
         switch tone {
         case .ok: return .systemGreen
-        case .warning: return .systemOrange
-        case .critical: return .systemRed
+        case .warning: return .systemYellow
+        case .critical: return .systemOrange
+        case .blocked: return .systemRed
         case .error: return .systemRed.withAlphaComponent(0.7)
         case .idle, .expired: return .systemGray
         }

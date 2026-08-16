@@ -188,8 +188,9 @@ private struct LimitRow: View {
 
     private var barColor: Color {
         switch BarPresentation.tone(of: limit) {
-        case .critical: return .red
-        case .warning: return .orange
+        case .blocked: return .red
+        case .critical: return .orange
+        case .warning: return .yellow
         case .ok: return .green
         default: return .gray
         }

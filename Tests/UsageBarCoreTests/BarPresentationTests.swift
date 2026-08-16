@@ -17,7 +17,7 @@ struct BarPresentationTests {
 
         let bar = BarPresentation.of(outcomes: [claude, grok])
         #expect(bar.title == "100%")
-        #expect(bar.tone == .critical)
+        #expect(bar.tone == .blocked)
         #expect(bar.worst?.id == "weekly_all")
         #expect(bar.provider == .claude)
     }
@@ -54,12 +54,31 @@ struct BarPresentationTests {
         #expect(bar.tone == .ok)
     }
 
-    @Test func chatGPTLockPaintsCriticalEvenBelowNinety() {
+    /// The step that matters while you work: 95 % still has room, 100 % does not.
+    /// They shared one colour, so the bar could not answer "keep going or switch?".
+    @Test func theWallHasItsOwnStepAboveNinetyFive() {
+        func tone(_ utilization: Double, locked: LockState = .unknown) -> BarTone {
+            BarPresentation.tone(of: Limit(
+                id: "w", label: "Week", utilization: utilization,
+                resetsAt: nil, locked: locked, scope: .account
+            ))
+        }
+        #expect(tone(0.69) == .ok)
+        #expect(tone(0.70) == .warning)
+        #expect(tone(0.89) == .warning)
+        #expect(tone(0.90) == .critical)
+        #expect(tone(0.95) == .critical)
+        // Claude never sends a lock state, so full alone has to mean blocked.
+        #expect(tone(1.0) == .blocked)
+        #expect(tone(0.4, locked: .locked) == .blocked)
+    }
+
+    @Test func chatGPTLockPaintsBlockedEvenBelowNinety() {
         let snap = UsageOutcome.snapshot(UsageSnapshot(provider: .chatGPT, limits: [
             Limit(id: "primary", label: "Week", utilization: 0.5, resetsAt: nil, locked: .locked, scope: .account),
         ]))
         let bar = BarPresentation.of(outcomes: [snap])
-        #expect(bar.tone == .critical)
+        #expect(bar.tone == .blocked)
         #expect(bar.title == "50%")
     }
 
@@ -76,7 +95,7 @@ struct BarPresentationTests {
         for outcomes in [[claude, chatGPT], [chatGPT, claude]] {
             let bar = BarPresentation.of(outcomes: outcomes)
             #expect(bar.title == "40%")
-            #expect(bar.tone == .critical)
+            #expect(bar.tone == .blocked)
             #expect(bar.provider == .chatGPT)
             #expect(bar.worst?.locked == .locked)
         }
@@ -163,11 +182,11 @@ struct BarPresentationTests {
 
         let bar = BarPresentation.of(outcomes: [claude, chatGPT, grok])
         #expect(bar.segments.map(\.provider) == [.claude, .chatGPT, .grok])
-        #expect(bar.segments.map(\.tone) == [.ok, .critical, .ok])
+        #expect(bar.segments.map(\.tone) == [.ok, .blocked, .ok])
         #expect(bar.segments[0].name == "Org A")
         // Dominant title stays the worst reading — the pill is the segments.
         #expect(bar.title == "100%")
-        #expect(bar.tone == .critical)
+        #expect(bar.tone == .blocked)
     }
 
     @Test func twoClaudeOrgsAreTwoSegments() {
@@ -405,7 +424,7 @@ struct BarPresentationTests {
         for cards in [[ok, locked], [locked, ok]] {
             let bar = BarPresentation.showing(cards)
             #expect(bar.title == "100%")
-            #expect(bar.tone == .critical)
+            #expect(bar.tone == .blocked)
             #expect(bar.worst?.locked == .locked)
             #expect(bar.provider == .chatGPT)
             #expect(bar.segments.count == 2)
@@ -510,7 +529,7 @@ struct BarPresentationTests {
         let idle = card("b", .claude, [limit("session", 0, resetsIn: 600)])
         let bar = BarPresentation.showing([locked, idle], pill: .compact)
         // The average alone would be 50 % and paint green over blocked work.
-        #expect(bar.segments.first?.tone == .critical)
+        #expect(bar.segments.first?.tone == .blocked)
         #expect(bar.segments.first?.utilization == 0.5)
     }
 
@@ -523,7 +542,7 @@ struct BarPresentationTests {
         let bar = BarPresentation.showing([grok], pill: .compact)
         #expect(BarPresentation.shortestWindowLimits([grok]).map(\.id) == ["fast"])
         #expect(bar.segments.first?.utilization == 0.5)
-        #expect(bar.segments.first?.tone == .critical)
+        #expect(bar.segments.first?.tone == .blocked)
     }
 
     @Test func compactPillKeepsAFailureVisibleWithoutAnyReading() {

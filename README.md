@@ -83,8 +83,20 @@ Settings (the old Cookies window) can hide individual limits, hide an account,
 and reorder cards. That order is the popover and the pill.
 
 The menu bar shows a **pill with one coloured slot per account**. Colour is the
-worst *account-wide* limit of that subscription (green < 70 %, orange < 90 %,
-red otherwise). A full model limit (for example one Claude model) does not paint
+worst *account-wide* limit of that subscription:
+
+| Colour | Meaning |
+|---|---|
+| green | under 70 % |
+| yellow | 70 – 89 % |
+| orange | 90 – 99 % — nearly out, but still usable |
+| red | locked, or the meter reads 100 % — nothing left to spend |
+
+Red is reserved for the wall. At 95 % you can keep working and at 100 % you
+cannot, and that is the one difference the bar exists to show. Claude never
+sends a lock state, so a full meter counts as blocked on its own.
+
+A full model limit (for example one Claude model) does not paint
 the slot — it stays in the popover. Click the pill for progress bars, remaining
 time until reset, and rename.
 

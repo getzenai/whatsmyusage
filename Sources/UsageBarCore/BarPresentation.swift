@@ -1,10 +1,15 @@
 import Foundation
 
+/// Four living steps, hottest last. Red is reserved for the wall — at 95 % there is
+/// still work left, and painting that the same colour as a locked account hid the
+/// only difference that changes what you do next.
 public enum BarTone: String, Sendable, Equatable {
     case idle
     case ok
     case warning
     case critical
+    /// Locked, or the meter is full. Nothing left to spend.
+    case blocked
     case expired
     case error
 }
@@ -280,7 +285,7 @@ public struct BarPresentation: Equatable, Sendable {
         let blocked = cards
             .flatMap(\.limits)
             .contains { $0.scope == .account && $0.locked == .locked }
-        let tone: BarTone = blocked ? .critical : toneOf(utilization: average)
+        let tone: BarTone = blocked ? .blocked : toneOf(utilization: average)
         return BarSegment(
             trackingID: compactTrackingID,
             provider: first.provider,
@@ -359,11 +364,14 @@ public struct BarPresentation: Equatable, Sendable {
     }
 
     public static func tone(of limit: Limit) -> BarTone {
-        if limit.locked == .locked { return .critical }
+        if limit.locked == .locked { return .blocked }
         return toneOf(utilization: limit.utilization)
     }
 
+    /// A provider that never sends a lock state — Claude — still hits the wall at
+    /// 100 %, so full counts as blocked even when `locked` stays unknown.
     public static func toneOf(utilization: Double) -> BarTone {
+        if utilization >= 1 { return .blocked }
         if utilization >= 0.9 { return .critical }
         if utilization >= 0.7 { return .warning }
         return .ok
