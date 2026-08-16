@@ -69,10 +69,8 @@ enum GrokParser {
     /// An empty data frame is a real answer (no tokens), not a miss. A
     /// missing data frame or a bad trailer is a miss — return nil, never 0.
     /// Count a token only when `token_id` is non-empty and `validity_end` is
-    /// in the future. If `validity_start` is present and still in the future,
-    /// skip it (a voucher that is not valid yet must not count today). A
-    /// missing start field is treated as already started — the bundle's
-    /// handling of that omission was not re-read from the chunk.
+    /// in the future. Grok's own `useUsageResetToken` mapper does the same
+    /// and does not look at `validity_start` — a future start still counts.
     static func parseRemainingResets(_ body: Data, now: Date = Date()) -> ResetRead? {
         guard let message = GrpcWeb.dataMessage(from: body),
               let root = Proto.decode(message)
@@ -81,11 +79,10 @@ enum GrokParser {
         var count = 0
         for token in Proto.messages(root, 10) {
             guard let id = Proto.string(token, 10), !id.isEmpty else { continue }
-            if let start = timestamp(token, 20), start > now { continue }
             guard let end = timestamp(token, 30), end > now else { continue }
             count += 1
         }
-        return count >= 1 ? .available(count) : .none
+        return count >= 1 ? .available(count) : ResetRead.none
     }
 
     private static func timestamp(_ fields: [Proto.Field], _ number: UInt64) -> Date? {

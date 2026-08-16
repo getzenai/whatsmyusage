@@ -56,7 +56,7 @@ enum ChatGPTParser {
               let count = JSONValue.int(root["available_count"]),
               count >= 0
         else { return nil }
-        return count >= 1 ? .available(count) : .none
+        return count >= 1 ? .available(count) : ResetRead.none
     }
 
     /// `allowed` is the honest field. Missing `allowed` stays unknown — `limit_reached`

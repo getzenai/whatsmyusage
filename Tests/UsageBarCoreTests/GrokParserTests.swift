@@ -114,26 +114,7 @@ struct GrokParserTests {
         #expect(Proto.decode(payload) == nil)
     }
 
-    /// Proto3 drops a numeric field at 0. Period present and weekly means the
-    /// provider answered — missing 1.1 is 0 %, not "no weekly limit".
-    /// Code reading + proto3 rule, not a live 0 % account.
-    @Test func remainingResetsEmptyFrameIsNoneNotZero() {
-        // Live misshapen-looking 0-byte data frame is a successful empty list.
-        let framed = UsageParser.parseGrokRemainingResets(body: GrpcWeb.encode(message: Data()))
-        let requestShape = UsageParser.parseGrokRemainingResets(body: GrpcWeb.emptyRequest)
-        #expect(framed == .none)
-        #expect(requestShape == .none)
-        #expect(framed?.count == nil)
-    }
-
-    @Test func remainingResetsMissingFrameIsOmitted() {
-        let trailer = GrpcWeb.frame(flag: 0x80, payload: Data("grpc-status:0\r\n".utf8))
-        #expect(UsageParser.parseGrokRemainingResets(body: trailer) == nil)
-        let failed = GrpcWeb.encode(message: Data(), trailerStatus: 13)
-        #expect(UsageParser.parseGrokRemainingResets(body: failed) == nil)
-    }
-
-    @Test func remainingResetsCountsUnexpiredTokensRegardlessOfOrder() {
+    @Test func remainingResetsCountDoesNotDependOnTokenOrder() {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let future = GrokResetWire.token(id: "a", end: 1_800_000_100)
         let past = GrokResetWire.token(id: "b", end: 1_799_999_000)
@@ -148,25 +129,11 @@ struct GrokParserTests {
         )
         #expect(forward == .available(2))
         #expect(backward == .available(2))
-        #expect(ResetRead.label(for: 2) == "2 resets available")
     }
 
-    @Test func remainingResetsSkipsEmptyIdAndMissingEnd() {
-        let now = Date(timeIntervalSince1970: 1_800_000_000)
-        let emptyID = GrokResetWire.token(id: "", end: 1_800_000_100)
-        let noEnd = GrokResetWire.field(10, string: "keep")
-        let body = GrokResetWire.frame(tokens: [emptyID, noEnd])
-        #expect(UsageParser.parseGrokRemainingResets(body: body, now: now) == .none)
-    }
-
-    @Test func remainingResetsOneTokenLabel() {
-        let now = Date(timeIntervalSince1970: 1_800_000_000)
-        let body = GrokResetWire.frame(tokens: [GrokResetWire.token(id: "a", end: 1_800_000_100)])
-        let read = UsageParser.parseGrokRemainingResets(body: body, now: now)
-        #expect(read == .available(1))
-        #expect(ResetRead.label(for: 1) == "Reset available")
-    }
-
+    /// Proto3 drops a numeric field at 0. Period present and weekly means the
+    /// provider answered — missing 1.1 is 0 %, not "no weekly limit".
+    /// Code reading + proto3 rule, not a live 0 % account.
     @Test func omittedPercentOnWeeklyPeriodIsZero() throws {
         let body = GrokWeeklyWire.frameOmittingPercent(period: 2, resetSeconds: 1_800_000_000)
         let limit = try #require(UsageParser.parseGrokWeekly(body: body))

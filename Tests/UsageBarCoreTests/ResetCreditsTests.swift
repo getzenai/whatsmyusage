@@ -9,7 +9,7 @@ struct ResetCreditsTests {
 
     @Test func grokEmptyDataFrameIsNoneNotZeroGuess() {
         let body = GrpcWeb.encode(message: Data())
-        #expect(UsageParser.parseGrokRemainingResets(body: body, now: now) == .none)
+        #expect(UsageParser.parseGrokRemainingResets(body: body, now: now) == ResetRead.none)
     }
 
     @Test func grokTrailerWithoutDataFrameIsAMiss() {
@@ -25,6 +25,16 @@ struct ResetCreditsTests {
         #expect(ResetRead.label(for: 1) == "Reset available")
     }
 
+    @Test func grokTokenOrderDoesNotChangeTheCount() {
+        let a = ResetWire.token(id: "tok-1", start: now.addingTimeInterval(-3600), end: now.addingTimeInterval(3600))
+        let b = ResetWire.token(id: "tok-2", start: now.addingTimeInterval(-60), end: now.addingTimeInterval(86_400))
+        let expired = ResetWire.token(id: "tok-old", start: now.addingTimeInterval(-86_400), end: now.addingTimeInterval(-1))
+        let forward = ResetWire.grok(tokens: [a, expired, b])
+        let backward = ResetWire.grok(tokens: [b, expired, a])
+        #expect(UsageParser.parseGrokRemainingResets(body: forward, now: now) == .available(2))
+        #expect(UsageParser.parseGrokRemainingResets(body: backward, now: now) == .available(2))
+    }
+
     @Test func grokTwoValidTokensCount() {
         let body = ResetWire.grok(tokens: [
             ResetWire.token(id: "tok-1", start: now.addingTimeInterval(-3600), end: now.addingTimeInterval(3600)),
@@ -38,21 +48,22 @@ struct ResetCreditsTests {
         let body = ResetWire.grok(tokens: [
             ResetWire.token(id: "tok-old", start: now.addingTimeInterval(-86_400), end: now.addingTimeInterval(-1)),
         ])
-        #expect(UsageParser.parseGrokRemainingResets(body: body, now: now) == .none)
+        #expect(UsageParser.parseGrokRemainingResets(body: body, now: now) == ResetRead.none)
     }
 
     @Test func grokEmptyTokenIdDoesNotCount() {
         let body = ResetWire.grok(tokens: [
             ResetWire.token(id: "", start: now.addingTimeInterval(-3600), end: now.addingTimeInterval(3600)),
         ])
-        #expect(UsageParser.parseGrokRemainingResets(body: body, now: now) == .none)
+        #expect(UsageParser.parseGrokRemainingResets(body: body, now: now) == ResetRead.none)
     }
 
-    @Test func grokFutureStartDoesNotCountToday() {
+    @Test func grokFutureStartStillCountsWhenEndIsFuture() {
+        // Grok's own mapper only checks token_id and validity_end, not start.
         let body = ResetWire.grok(tokens: [
             ResetWire.token(id: "tok-later", start: now.addingTimeInterval(3600), end: now.addingTimeInterval(86_400)),
         ])
-        #expect(UsageParser.parseGrokRemainingResets(body: body, now: now) == .none)
+        #expect(UsageParser.parseGrokRemainingResets(body: body, now: now) == .available(1))
     }
 
     @Test func grokMissingStartStillCountsWhenEndIsFuture() {
@@ -64,7 +75,7 @@ struct ResetCreditsTests {
 
     @Test func chatGPTZeroIsNoneNotAGuess() {
         let body = Data(#"{"available_count":0,"credits":[],"immediate_reset_purchase_eligible":false}"#.utf8)
-        #expect(UsageParser.parseChatGPTResetCredits(body: body) == .none)
+        #expect(UsageParser.parseChatGPTResetCredits(body: body) == ResetRead.none)
     }
 
     @Test func chatGPTPositiveCountIsAvailable() {
