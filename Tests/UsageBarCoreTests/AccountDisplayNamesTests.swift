@@ -64,4 +64,14 @@ struct AccountDisplayNamesTests {
         #expect(first == second)
         #expect(first == "claude #2 (bbb-2222)")
     }
+
+    @Test func fallbackShortIdIsTheEightCharactersAfterTheColon() {
+        let name = AccountDisplayNames.fallback(
+            trackingID: "grok:19739FD0-2643-491D-A522-997F006ED653",
+            provider: .grok,
+            peers: ["grok:19739FD0-2643-491D-A522-997F006ED653"]
+        )
+        #expect(name == "grok #1 (19739FD0)")
+        #expect(!name.contains("grok:197"))
+    }
 }

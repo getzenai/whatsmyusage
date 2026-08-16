@@ -98,10 +98,11 @@ It also refreshes every five minutes on its own.
 
 ## CLI
 
-`whatsmyusage` with no arguments prints which account to use, then one line
-per account. `--json` is the data structure. Names come from the app
-(custom, then onboarding). A reading older than five minutes plus 90 seconds
-is unknown — never an old number presented as current.
+`whatsmyusage` with no arguments prints the usage block, then which account
+to use, then one line per account. `--json` is the data structure. Names and
+hidden limits come from the app; hiding is display only. A reading older than
+five minutes plus 90 seconds is unknown — never an old number presented as
+current.
 
 ```
 whatsmyusage

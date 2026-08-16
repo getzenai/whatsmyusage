@@ -13,8 +13,8 @@ enum WhatsMyUsageCLI {
             switch command {
             case .help:
                 FileHandle.standardOutput.write(Data(Command.helpText.utf8))
-            case let .status(json, limits, logURL):
-                try runStatus(json: json, limits: limits, logURL: logURL)
+            case let .status(json, limits, logURL, printUsage):
+                try runStatus(json: json, limits: limits, logURL: logURL, printUsage: printUsage)
             case let .pick(provider, json, logURL):
                 try runPick(provider: provider, json: json, logURL: logURL)
             case let .achievements(json, logURL):
@@ -29,8 +29,14 @@ enum WhatsMyUsageCLI {
         }
     }
 
-    private static func runStatus(json: Bool, limits: Bool, logURL: URL?) throws {
+    private static func runStatus(json: Bool, limits: Bool, logURL: URL?, printUsage: Bool) throws {
         let opened = try openLatest(logURL)
+        if opened.latest.isEmpty {
+            throw CLIError(
+                "no readings in the log — is WhatsMyUsage running and refreshed?",
+                exitCode: 2
+            )
+        }
         let now = Date()
         let status = UsageQuery.status(from: opened.latest, now: now)
         if json {
@@ -38,13 +44,19 @@ enum WhatsMyUsageCLI {
             return
         }
         let pick = UsageQuery.pick(from: opened.latest, now: now)
-        write(HumanStatus.render(
+        let body = HumanStatus.render(
             status: status,
             pick: pick,
             names: names(),
             now: now,
-            showLimits: limits
-        ))
+            showLimits: limits,
+            preferences: DisplayPreferences.loadFromAppSuite()
+        )
+        if printUsage {
+            write(Command.usageBlock + "\n\n" + body)
+        } else {
+            write(body)
+        }
     }
 
     private static func runPick(provider: Provider?, json: Bool, logURL: URL?) throws {
@@ -139,20 +151,23 @@ private struct CLIError: Error {
 }
 
 private enum Command {
-    case status(json: Bool, limits: Bool, log: URL?)
+    case status(json: Bool, limits: Bool, log: URL?, printUsage: Bool)
     case pick(provider: Provider?, json: Bool, log: URL?)
     case achievements(json: Bool, log: URL?)
     case help
 
-    static let helpText = """
-    whatsmyusage — which account has room
-
+    static let usageBlock = """
     Usage:
-      whatsmyusage
       whatsmyusage status [--json] [--limits]
       whatsmyusage pick [--provider claude|chatGPT|grok] [--json]
       whatsmyusage achievements [--json]
       whatsmyusage --help
+    """
+
+    static let helpText = """
+    whatsmyusage — which account has room
+
+    \(usageBlock)
 
     `pick` treats a full model-scoped limit as blocking. Claude `locked` is
     always unknown — read utilization.
@@ -162,7 +177,7 @@ private enum Command {
     Exit codes:
       0  ok (`pick`: an account still has room)
       1  `pick`: every account is blocked or stale
-      2  missing log, bad arguments, or a read error
+      2  missing log, empty log, bad arguments, or a read error
 
     """
 
@@ -171,7 +186,7 @@ private enum Command {
             return .help
         }
         if args.isEmpty {
-            return .status(json: false, limits: false, log: nil)
+            return .status(json: false, limits: false, log: nil, printUsage: true)
         }
         var rest = args
         let verb: String
@@ -186,7 +201,7 @@ private enum Command {
         case "status":
             let limits = takeFlag(&rest, "--limits")
             try ensureEmpty(rest)
-            return .status(json: json, limits: limits, log: log)
+            return .status(json: json, limits: limits, log: log, printUsage: false)
         case "pick":
             let raw = try takeValue(&rest, "--provider")
             try ensureEmpty(rest)

@@ -36,7 +36,8 @@ public enum AccountDisplayNames {
     public static func fallback(trackingID: String, provider: Provider, peers: [String]) -> String {
         let sorted = Set(peers + [trackingID]).sorted()
         let index = (sorted.firstIndex(of: trackingID) ?? 0) + 1
-        let short = String(trackingID.prefix(8))
+        let afterColon = trackingID.split(separator: ":", maxSplits: 1).last.map(String.init) ?? trackingID
+        let short = String(afterColon.prefix(8))
         return "\(provider.rawValue) #\(index) (\(short))"
     }
 

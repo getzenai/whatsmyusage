@@ -18,8 +18,10 @@ public enum HumanStatus {
         names: Names,
         now: Date,
         showLimits: Bool,
+        preferences: DisplayPreferences = DisplayPreferences(),
         calendar: Calendar = .current
     ) -> String {
+        let shown = preferences.applied(to: status)
         let roster = status.accounts.map { (trackingID: $0.trackingID, provider: $0.provider) }
         func name(for trackingID: String, provider: Provider) -> String {
             AccountDisplayNames.resolve(
@@ -31,23 +33,27 @@ public enum HumanStatus {
             )
         }
 
+        if status.accounts.isEmpty {
+            return "No readings in the log."
+        }
+
         var lines: [String] = []
-        let stale = status.observedAt.map { UsageQuery.isStale($0, now: now) } ?? status.accounts.isEmpty
+        let stale = status.observedAt.map { UsageQuery.isStale($0, now: now) } ?? false
         if stale, let observedAt = status.observedAt {
             lines.append(
-                "Readings are \(agePhrase(observedAt, now: now)) old. Open WhatsMyUsage so it can refresh."
+                "Readings are \(agePhrase(from: observedAt, now: now)) old. Open WhatsMyUsage so it can refresh."
             )
             lines.append("")
         }
 
-        lines.append(pickLine(pick: pick, status: status, now: now, calendar: calendar, name: name))
+        lines.append(pickLine(pick: pick, status: shown, now: now, calendar: calendar, name: name))
 
-        if status.accounts.isEmpty {
+        if shown.accounts.isEmpty {
             return lines.joined(separator: "\n")
         }
 
         lines.append("")
-        for account in status.accounts {
+        for account in shown.accounts {
             let label = name(for: account.trackingID, provider: account.provider)
             let accountStale = account.limits.allSatisfy { $0.utilization == nil }
             if accountStale {
@@ -219,10 +225,14 @@ public enum HumanStatus {
         )
     }
 
-    private static func agePhrase(_ observedAt: Date, now: Date) -> String {
-        let whole = Int(now.timeIntervalSince(observedAt).rounded())
-        if whole < 60 { return "\(max(0, whole))s" }
-        if whole < 3600 { return "\(whole / 60)m" }
-        return "\(whole / 3600)h"
+    /// Floor only. Under an hour: `6m`. After that: `2h 20m`, never `1h` for six minutes.
+    public static func agePhrase(from observedAt: Date, now: Date) -> String {
+        let seconds = max(0, Int(now.timeIntervalSince(observedAt).rounded(.down)))
+        if seconds < 60 { return "\(seconds)s" }
+        if seconds < 3600 { return "\(seconds / 60)m" }
+        let hours = seconds / 3600
+        let minutes = (seconds % 3600) / 60
+        if minutes == 0 { return "\(hours)h" }
+        return "\(hours)h \(minutes)m"
     }
 }

@@ -228,4 +228,95 @@ struct HumanStatusTests {
         #expect(!hidden.contains("5-hour"))
         #expect(shown.contains("5-hour"))
     }
+
+    @Test func emptyLogDoesNotClaimEveryAccountIsFull() {
+        let status = UsageQuery.status(from: [], now: origin)
+        let text = HumanStatus.render(
+            status: status,
+            pick: UsageQuery.pick(from: [], now: origin),
+            names: HumanStatus.Names(),
+            now: origin,
+            showLimits: false,
+            calendar: berlinCalendar()
+        )
+        #expect(text == "No readings in the log.")
+        #expect(!text.contains("No account has room"))
+    }
+
+    @Test func hiddenLimitsStayOutOfTheTextEvenWhenTheyDisagree() {
+        let now = origin
+        let latest = [
+            row(
+                trackingID: "acct-1",
+                limitID: "weekly_all",
+                utilization: 0.2,
+                label: "Week",
+                now: now
+            ),
+            row(
+                trackingID: "acct-1",
+                limitID: "weekly_scoped:Fable",
+                utilization: 1,
+                locked: .unknown,
+                scope: .model,
+                label: "Week · Fable",
+                now: now
+            ),
+        ]
+        let prefs = DisplayPreferences(
+            hiddenLimitKeys: [DisplayPreferences.limitKey(
+                trackingID: "acct-1",
+                limitID: "weekly_scoped:Fable"
+            )]
+        )
+        let text = HumanStatus.render(
+            status: UsageQuery.status(from: latest, now: now),
+            pick: UsageQuery.pick(from: latest, now: now),
+            names: HumanStatus.Names(defaults: ["acct-1": "Claude Max"]),
+            now: now,
+            showLimits: true,
+            preferences: prefs,
+            calendar: berlinCalendar()
+        )
+        #expect(!text.contains("Fable"))
+        #expect(text.contains("Week"))
+        // Hidden Fable still blocks pick — hiding is display, not safety.
+        #expect(text.contains("No account has room"))
+    }
+
+    @Test func agePhraseFloorsAndKeepsMinutesPastAnHour() {
+        let now = origin
+        #expect(HumanStatus.agePhrase(from: now.addingTimeInterval(-6 * 60), now: now) == "6m")
+        #expect(HumanStatus.agePhrase(from: now.addingTimeInterval(-16 * 60), now: now) == "16m")
+        #expect(HumanStatus.agePhrase(from: now.addingTimeInterval(-41 * 60), now: now) == "41m")
+        #expect(HumanStatus.agePhrase(from: now.addingTimeInterval(-(2 * 3600 + 60)), now: now) == "2h 1m")
+        #expect(HumanStatus.agePhrase(from: now.addingTimeInterval(-24 * 3600), now: now) == "24h")
+        #expect(HumanStatus.agePhrase(from: now.addingTimeInterval(-(2 * 3600 + 20 * 60)), now: now) == "2h 20m")
+    }
+
+    @Test func staleSentenceUsesMinutesNotRoundedUpHours() {
+        let now = origin
+        let staleMinutes = (UsageQuery.staleAfter / 60) + 2
+        let latest = [
+            row(
+                trackingID: "acct-1",
+                limitID: "weekly_all",
+                utilization: 0.1,
+                label: "Week",
+                minutesAgo: staleMinutes,
+                now: now
+            ),
+        ]
+        let text = HumanStatus.render(
+            status: UsageQuery.status(from: latest, now: now),
+            pick: UsageQuery.pick(from: latest, now: now),
+            names: HumanStatus.Names(custom: ["acct-1": "Claude Max Zen AI"]),
+            now: now,
+            showLimits: false,
+            calendar: berlinCalendar()
+        )
+        #expect(text.contains("Readings are \(Int(staleMinutes))m old."))
+        #expect(!text.contains("1h old"))
+        #expect(!text.contains("h old"))
+    }
 }
