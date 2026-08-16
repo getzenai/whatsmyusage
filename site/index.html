@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>WhatsMyUsage — every AI limit, one glance</title>
+    <meta
+      name="description"
+      content="See Claude, ChatGPT, and Grok across every account you use. Glance up and keep working."
+    />
+    <link rel="icon" href="cat-pose.png" type="image/png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Azeret+Mono:wght@400;500;600&family=Bricolage+Grotesque:opsz,wght@12..96,400..800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+
+    <header class="menubar" role="banner">
+      <div class="menubar-left">
+        <a class="brand" href="#top">
+          <img src="cat-fabi.svg" width="22" height="22" alt="" />
+          WhatsMyUsage
+        </a>
+        <nav class="os-menus" aria-hidden="true">
+          <span>File</span>
+          <span>Edit</span>
+          <span>View</span>
+        </nav>
+      </div>
+      <div class="menubar-right">
+        <div class="pill" aria-label="Usage pill with four accounts">
+          <span class="pill-shell">
+            <span class="pill-slot" data-tone="lock"></span>
+            <span class="pill-slot" data-tone="ok"></span>
+            <span class="pill-slot" data-tone="ok"></span>
+            <span class="pill-slot" data-tone="ok"></span>
+          </span>
+        </div>
+        <svg class="os-icon" viewBox="0 0 16 16" aria-hidden="true">
+          <path
+            d="M2 10c1.6-2.2 3.2-3.3 6-3.3S12.4 7.8 14 10"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.4"
+            stroke-linecap="round"
+          />
+          <path
+            d="M4.4 12.1c1.1-1.4 2.2-2.1 3.6-2.1s2.5.7 3.6 2.1"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.4"
+            stroke-linecap="round"
+          />
+          <circle cx="8" cy="14" r="0.9" fill="currentColor" />
+        </svg>
+        <svg class="os-icon battery" viewBox="0 0 22 12" aria-hidden="true">
+          <rect x="0.7" y="1.2" width="18" height="9.6" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.2" />
+          <rect x="2.2" y="2.7" width="12.4" height="6.6" rx="1" fill="currentColor" />
+          <path d="M19.6 4.2h1.1a.9.9 0 0 1 .9.9v1.8a.9.9 0 0 1-.9.9h-1.1" fill="currentColor" />
+        </svg>
+        <time class="clock" id="clock" datetime="">9:41</time>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="hero" id="top">
+        <div class="hero-copy">
+          <img class="hero-cat" src="cat-fabi.svg" width="250" height="330" alt="Line drawing of a cat, head down between its front legs, looking back at you." />
+          <p class="eyebrow">A native macOS menu bar app</p>
+          <h1>Every AI limit. One glance.</h1>
+          <p class="lede">
+            See Claude, ChatGPT, and Grok across every account you use. Glance up and keep working.
+          </p>
+          <div class="hero-actions">
+            <a class="cta" href="#get">Build from source</a>
+            <a class="ghost" href="https://github.com/getzenai/whatsmyusage">View on GitHub</a>
+            <p class="cta-note">Free and open source. macOS 14+. No WhatsMyUsage account.</p>
+          </div>
+        </div>
+
+        <aside class="popover" aria-label="Popover preview">
+          <article class="account">
+            <header>
+              <h2>Claude Max</h2>
+              <data value="0.92">92%</data>
+            </header>
+            <div class="bar" style="--p: 0.92" data-tone="lock"></div>
+            <p>Week · resets in 2d 4h</p>
+          </article>
+          <article class="account">
+            <header>
+              <h2>Claude Team</h2>
+              <data value="0.41">41%</data>
+            </header>
+            <div class="bar" style="--p: 0.41" data-tone="ok"></div>
+            <p>Week · resets in 4d</p>
+          </article>
+          <article class="account">
+            <header>
+              <h2>ChatGPT</h2>
+              <data value="0.18">18%</data>
+            </header>
+            <div class="bar" style="--p: 0.18" data-tone="ok"></div>
+            <p>Week · resets in 2d</p>
+          </article>
+          <article class="account">
+            <header>
+              <h2>Grok</h2>
+              <data value="0.07">7%</data>
+            </header>
+            <div class="bar" style="--p: 0.07" data-tone="ok"></div>
+            <p>2-hour window</p>
+          </article>
+          <footer>
+            <span>Refresh</span>
+            <span>Settings…</span>
+            <span class="ver">0.1.0</span>
+            <span>Quit</span>
+          </footer>
+        </aside>
+      </section>
+
+      <section class="instrument">
+        <figure class="hero-pill">
+          <div class="big-pill" aria-hidden="true">
+            <span class="big-slot" data-tone="lock"></span>
+            <span class="big-slot" data-tone="ok"></span>
+            <span class="big-slot" data-tone="ok"></span>
+            <span class="big-slot" data-tone="ok"></span>
+          </div>
+          <figcaption>
+            <span>Claude Max</span>
+            <span>Claude Team</span>
+            <span>ChatGPT</span>
+            <span>Grok</span>
+          </figcaption>
+        </figure>
+        <p class="instrument-note">One slot per account. Green still has room.</p>
+      </section>
+
+      <section class="horizon">
+        <h2>Stop hunting for usage.</h2>
+        <p>
+          Claude in one tab. ChatGPT in another. Grok somewhere else. A second account means another browser profile — or logging out just to check a number. WhatsMyUsage brings them all into one place.
+        </p>
+      </section>
+
+      <section class="wishes" aria-label="What it does">
+        <div>
+          <h2>Every account, together.</h2>
+          <p>
+            Add multiple subscriptions, multiple accounts from the same provider, and multiple Claude organizations under one login. Rename, hide, and reorder them to match how you work.
+          </p>
+        </div>
+        <div>
+          <h2>See which account has room.</h2>
+          <p>
+            Glance at the colors. Click a slot for every limit and when it opens again.
+          </p>
+        </div>
+        <div>
+          <h2>Know when you are back.</h2>
+          <p>
+            Usage refreshes every five minutes. Click for every limit and its reset time. When a slot turns from red to green, that account has room again.
+          </p>
+        </div>
+      </section>
+
+      <section class="steps">
+        <h2>One paste per account. Then just glance up.</h2>
+        <ol>
+          <li>
+            <p>Paste once.</p>
+            <span>Copy the cookie table or <code>Cookie:</code> header from your browser.</span>
+          </li>
+          <li>
+            <p>Keep it local.</p>
+            <span>WhatsMyUsage stores only the session keys in macOS Keychain and discards the rest. Requests go directly from your Mac to each provider.</span>
+          </li>
+          <li>
+            <p>Glance up.</p>
+            <span>The menu-bar pill keeps every account visible without opening another dashboard.</span>
+          </li>
+        </ol>
+      </section>
+
+      <section class="horizon after-steps">
+        <h2>Check once. Then get back to it.</h2>
+        <p>
+          Before the next long chat, glance up. Pick an account with room — or see when a blocked one opens again.
+        </p>
+      </section>
+
+      <section class="get" id="get">
+        <img class="get-cat" src="cat-fabi.svg" width="125" height="165" alt="" />
+        <h2>Put your limits where you can see them.</h2>
+        <p>
+          Native menu-bar accessory. Cookies stay on the Mac. Claude, ChatGPT, and Grok.
+        </p>
+        <p class="get-note">
+          Free. Open source. Native on macOS 14+.
+        </p>
+        <div class="get-actions">
+          <a class="cta" href="https://github.com/getzenai/whatsmyusage">Build WhatsMyUsage from source</a>
+          <a class="ghost" href="#top">Back to the top</a>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-foot">
+      <img src="cat-fabi.svg" width="28" height="28" alt="" />
+      <p>whatsmyusage.com</p>
+      <p>Open source by <a href="https://getzenai.com">Zen AI GmbH</a></p>
+      <p><a href="impressum.html">Impressum</a></p>
+    </footer>
+
+    <script src="app.js"></script>
+  </body>
+</html>
