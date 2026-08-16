@@ -47,6 +47,18 @@ enum ChatGPTParser {
         return .snapshot(UsageSnapshot(provider: .chatGPT, accountLabel: label, limits: limits))
     }
 
+    /// `/backend-api/wham/rate-limit-reset-credits`. Nil when the key is
+    /// absent or not a number — that is a miss, not zero. `0` is `.none`.
+    static func parseResetCredits(_ body: Data) -> ResetRead? {
+        guard let obj = try? JSONSerialization.jsonObject(with: body),
+              let root = obj as? [String: Any],
+              root.keys.contains("available_count"),
+              let count = JSONValue.int(root["available_count"]),
+              count >= 0
+        else { return nil }
+        return count >= 1 ? .available(count) : .none
+    }
+
     /// `allowed` is the honest field. Missing `allowed` stays unknown — `limit_reached`
     /// is not a substitute we invented a mapping for.
     private static func lockState(_ root: [String: Any]) -> LockState {

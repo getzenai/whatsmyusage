@@ -61,6 +61,41 @@ enum GrokParser {
         )
     }
 
+    /// `GetRemainingResets` (grpc-web). Field numbers from `consumer_ui.proto`
+    /// in the Grok client chunk (`messageDesc(b, 40)`), 2026-08-16 — **not**
+    /// checked against a non-empty live response. `10` repeated `tokens`;
+    /// each `10` token_id, `20` validity_start, `30` validity_end.
+    ///
+    /// An empty data frame is a real answer (no tokens), not a miss. A
+    /// missing data frame or a bad trailer is a miss — return nil, never 0.
+    /// Count a token only when `token_id` is non-empty and `validity_end` is
+    /// in the future. If `validity_start` is present and still in the future,
+    /// skip it (a voucher that is not valid yet must not count today). A
+    /// missing start field is treated as already started — the bundle's
+    /// handling of that omission was not re-read from the chunk.
+    static func parseRemainingResets(_ body: Data, now: Date = Date()) -> ResetRead? {
+        guard let message = GrpcWeb.dataMessage(from: body),
+              let root = Proto.decode(message)
+        else { return nil }
+
+        var count = 0
+        for token in Proto.messages(root, 10) {
+            guard let id = Proto.string(token, 10), !id.isEmpty else { continue }
+            if let start = timestamp(token, 20), start > now { continue }
+            guard let end = timestamp(token, 30), end > now else { continue }
+            count += 1
+        }
+        return count >= 1 ? .available(count) : .none
+    }
+
+    private static func timestamp(_ fields: [Proto.Field], _ number: UInt64) -> Date? {
+        guard let message = Proto.message(fields, number),
+              let seconds = Proto.varint(message, 1)
+        else { return nil }
+        let nanos = Proto.varint(message, 2) ?? 0
+        return Date(timeIntervalSince1970: Double(seconds) + Double(nanos) / 1_000_000_000)
+    }
+
     private static func looksLikeWindow(_ obj: [String: Any]) -> Bool {
         obj["remainingQueries"] != nil && obj["totalQueries"] != nil
     }

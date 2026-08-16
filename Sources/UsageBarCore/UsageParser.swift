@@ -86,6 +86,18 @@ public enum UsageParser {
         GrokParser.parseWeekly(body)
     }
 
+    /// Grok `GetRemainingResets`. Nil is a miss (do not display, do not
+    /// store 0). `.none` is a successful empty list.
+    public static func parseGrokRemainingResets(body: Data, now: Date = Date()) -> ResetRead? {
+        GrokParser.parseRemainingResets(body, now: now)
+    }
+
+    /// ChatGPT `rate-limit-reset-credits`. Nil is a miss. `.none` is
+    /// `available_count: 0`.
+    public static func parseChatGPTResetCredits(body: Data) -> ResetRead? {
+        ChatGPTParser.parseResetCredits(body)
+    }
+
     /// ChatGPT `/api/auth/session` → bearer for `/backend-api/wham/usage`.
     /// A 200 without `accessToken` is expired. That field is the proof the cookie
     /// still mints a backend token — not a 401 on the usage call, which rejects

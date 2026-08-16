@@ -56,6 +56,8 @@ public struct AccountCard: Equatable, Sendable, Identifiable {
     public let tone: BarTone
     public let utilization: Double?
     public let message: String?
+    /// Count of unused reset vouchers. Nil means hide the line — never 0.
+    public let resetAvailable: Int?
 
     public init(
         trackingID: String,
@@ -64,7 +66,8 @@ public struct AccountCard: Equatable, Sendable, Identifiable {
         limits: [Limit],
         tone: BarTone,
         utilization: Double?,
-        message: String? = nil
+        message: String? = nil,
+        resetAvailable: Int? = nil
     ) {
         self.trackingID = trackingID
         self.provider = provider
@@ -73,6 +76,7 @@ public struct AccountCard: Equatable, Sendable, Identifiable {
         self.tone = tone
         self.utilization = utilization
         self.message = message
+        self.resetAvailable = resetAvailable.flatMap { $0 >= 1 ? $0 : nil }
     }
 
     public var segment: BarSegment {
@@ -96,8 +100,26 @@ public struct AccountCard: Equatable, Sendable, Identifiable {
             limits: visible,
             tone: worst.map(BarPresentation.tone(of:)) ?? (message == nil ? .idle : tone),
             utilization: worst?.utilization,
-            message: message
+            message: message,
+            resetAvailable: resetAvailable
         )
+    }
+
+    public func withResetAvailable(_ count: Int?) -> AccountCard {
+        AccountCard(
+            trackingID: trackingID,
+            provider: provider,
+            defaultName: defaultName,
+            limits: limits,
+            tone: tone,
+            utilization: utilization,
+            message: message,
+            resetAvailable: count
+        )
+    }
+
+    public var resetAvailableLabel: String? {
+        resetAvailable.flatMap(ResetRead.label(for:))
     }
 }
 
@@ -400,7 +422,8 @@ public struct BarPresentation: Equatable, Sendable {
             limits: card.limits,
             tone: card.tone,
             utilization: card.utilization,
-            message: card.message
+            message: card.message,
+            resetAvailable: card.resetAvailable
         )
     }
 

@@ -56,8 +56,30 @@ Grok needs **two** calls: `rest/rate-limits` per model for the 2 h window (short
 one for the week (long term) — the same relationship as Claude's `five_hour`/`seven_day`. The
 weekly limit is the account-wide one; the 2 h windows are per model.
 
-Not needed, same encoding, deliberately left out: `ConsumerUiSvc/GetRemainingResets`
-("Reset available"), `GetPrepaidBenefits`, `GrokBuildBilling/ListInvoices`.
+Measured 2026-08-16: `POST /prod_mc_billing.ConsumerUiSvc/GetRemainingResets` —
+same empty grpc-web request as this config call. HTTP 200, trailer `grpc-status:0`.
+An empty data frame is a successful empty list (no tokens), not a miss. Field
+numbers come from `prod/mc/billing-proto/proto/consumer_ui.proto` in the live
+client chunk (`messageDesc`). **They have not been checked against a non-empty
+live response** — the only measured body was an empty data frame. Until someone
+sees a token on the wire, treat the table as unverified:
+
+| Path | Type | Meaning |
+|---|---|---|
+| `10` | repeated message | `tokens` (`ConsumerResetToken`) |
+| `10.10` | string | `token_id` — skip if empty; never store or display |
+| `10.20` | Timestamp | `validity_start` |
+| `10.30` | Timestamp | `validity_end` — only count if in the future |
+
+Count a token only when `token_id` is non-empty and `validity_end` is in the
+future. If `validity_start` is present and still in the future, skip it. A
+missing start is treated as already started — the chunk's handling of that
+omission was not re-read. The web client (`useUsageResetToken`) filters the
+same way for id and end, then shows `availableCount`. `redeemReset` exists on
+the same service — the app must not call it. A missing data frame or a
+non-zero trailer is "no answer", not 0. Display only when the count is ≥ 1.
+
+Still unused: `GetPrepaidBenefits`, `GrokBuildBilling/ListInvoices`.
 
 ## Method
 

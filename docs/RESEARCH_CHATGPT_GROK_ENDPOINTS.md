@@ -65,7 +65,7 @@ Supplementary endpoints, not needed for v1:
 
 | Endpoint | Content |
 |---|---|
-| `GET /backend-api/wham/rate-limit-reset-credits` | "Reset available" credit: `available_count`, `immediate_reset_purchase_eligible` |
+| `GET /backend-api/wham/rate-limit-reset-credits` | Reset vouchers. Measured 2026-08-16: `{ "available_count": 0, "credits": [], "immediate_reset_purchase_eligible": false, "total_earned_count": 0 }`. Same Bearer as `/wham/usage`. Missing `available_count` is a miss, not 0. `immediate_reset_purchase_eligible` is a store flag — do not redeem, do not offer to buy. |
 | `GET /backend-api/accounts/{accountId}/remaining_balance` | balance as a string (`"0"`) |
 | `GET /backend-api/pageConfigs/usage_limits` | only controls what the web UI displays |
 
@@ -92,11 +92,9 @@ Three differences that matter for the app:
 3. **`windowSizeSeconds` instead of `reset_at`** — there is no point in time, only a window
    length (2 h here). A "resets at …" **cannot** be derived from it.
 
-**The "Reset available" display is expensive.** It comes from
-`POST /prod_mc_billing.ConsumerUiSvc/GetRemainingResets`, and that is **gRPC-Web with protobuf
-encoding** (`application/grpc-web+proto`), not JSON. Without the `.proto` definitions that is
-considerable work in Swift. **Leave it out for v1** — the same encoding applies to every
-`ConsumerUiSvc` and `GrokBuildBilling` call (payment methods, balance, auto top-up).
+**"Reset available" is now readable.** `POST /prod_mc_billing.ConsumerUiSvc/GetRemainingResets`
+uses the same grpc-web encoding as `GetGrokCreditsConfig`. Field numbers and the empty-list
+rule: `RESEARCH_GROK_WEEKLY_LIMIT.md`. Do not call `redeemReset`.
 
 ## What the three providers have in common — and what they don't
 

@@ -115,6 +115,12 @@ private struct AccountCardView: View {
             ForEach(card.limits) { limit in
                 LimitRow(limit: limit, wait: wait(for: limit))
             }
+
+            if let reset = card.resetAvailableLabel {
+                Text(reset)
+                    .font(.system(size: 12))
+                    .foregroundStyle(card.tone == .blocked ? Color.primary : Color.secondary)
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
