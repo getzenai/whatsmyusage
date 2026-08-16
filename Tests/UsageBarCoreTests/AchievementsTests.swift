@@ -51,8 +51,17 @@ private func maxOuts(_ count: Int) -> [UsageMeasurement] {
     }
 }
 
-private func evaluate(_ series: [[UsageMeasurement]]) -> [Achievements.Achievement] {
-    Achievements.evaluate(series: series, observedDays: [], calendar: utc)
+private func evaluate(
+    _ series: [[UsageMeasurement]],
+    days: Set<Date> = []
+) -> [Achievements.Achievement] {
+    Achievements.evaluate(series: series, observedDays: days, calendar: utc)
+}
+
+private func days(_ count: Int, fromHour: Double = 0) -> Set<Date> {
+    Set((0..<count).map {
+        utc.startOfDay(for: origin.addingTimeInterval((fromHour + Double($0) * 24) * 3600))
+    })
 }
 
 private func earned(_ list: [Achievements.Achievement], _ kind: Achievements.Kind) -> Achievements.Achievement {
@@ -572,12 +581,312 @@ struct AchievementsTests {
         #expect(Achievements.Kind.patience.section == .waiting)
         #expect(Achievements.Kind.slowBurn.section == .pace)
         #expect(Achievements.Kind.nightOwl.section == .clock)
+        #expect(Achievements.Kind.dawnPatrol.section == .clock)
+        #expect(Achievements.Kind.roundTheClock.section == .clock)
         #expect(Achievements.Kind.cleanWeek.section == .stamina)
-        #expect(Set(Achievements.Kind.allCases.map(\.section)).isDisjoint(with: [
-            Achievements.Section.collection,
-            .husbandry,
-            .log,
-        ]))
+        #expect(Achievements.Kind.marathonWeek.section == .stamina)
+        #expect(Achievements.Kind.twoHorses.section == .collection)
+        #expect(Achievements.Kind.bounce.section == .husbandry)
+        #expect(Achievements.Kind.theAnswer.section == .log)
+        #expect(Achievements.Kind.allCases.contains(.theAnswer))
+    }
+
+    @Test func dawnPatrolNeedsARiseBetweenFiveAndSeven() {
+        let dawn = [[reading(hours: 5.2, 0.2), reading(hours: 5.8, 0.4)]]
+        #expect(earned(evaluate(dawn), .dawnPatrol).isEarned)
+
+        let sitting = [[reading(hours: 5.5, 0.3), reading(hours: 6.5, 0.3)]]
+        #expect(!earned(evaluate(sitting), .dawnPatrol).isEarned)
+
+        let night = [[reading(hours: 1.5, 0.2), reading(hours: 2.5, 0.4)]]
+        #expect(!earned(evaluate(night), .dawnPatrol).isEarned)
+        #expect(earned(evaluate(night), .nightOwl).isEarned)
+    }
+
+    @Test func weekendWarriorNeedsSaturdayAndTheSundayAfter() {
+        let both = [[
+            reading(hours: 26, 0.5),
+            reading(hours: 28, 1.0),
+            reading(hours: 52, 1.0),
+            reading(hours: 55, 0.0),
+        ]]
+        #expect(earned(evaluate(both), .weekendWarrior).isEarned)
+
+        let saturdayOnly = [[
+            reading(hours: 26, 0.5),
+            reading(hours: 28, 1.0),
+            reading(hours: 30, 0.0),
+        ]]
+        #expect(!earned(evaluate(saturdayOnly), .weekendWarrior).isEarned)
+    }
+
+    @Test func mondayMorningIsARiseToFullBeforeTen() {
+        let hit = [[reading(hours: 80, 0.5), reading(hours: 81, 1.0)]]
+        #expect(earned(evaluate(hit), .mondayMorning).isEarned)
+
+        let leftover = [[reading(hours: 70, 1.0), reading(hours: 81, 1.0)]]
+        #expect(!earned(evaluate(leftover), .mondayMorning).isEarned)
+
+        let tooLate = [[reading(hours: 82, 0.5), reading(hours: 83, 1.0)]]
+        #expect(!earned(evaluate(tooLate), .mondayMorning).isEarned)
+    }
+
+    @Test func fridayFinisherIsARiseToFullAfterEighteen() {
+        let hit = [[reading(hours: 17, 0.5), reading(hours: 19, 1.0)]]
+        #expect(earned(evaluate(hit), .fridayFinisher).isEarned)
+
+        let tooEarly = [[reading(hours: 17, 0.5), reading(hours: 17.5, 1.0)]]
+        #expect(!earned(evaluate(tooEarly), .fridayFinisher).isEarned)
+    }
+
+    @Test func aModelLimitDoesNotCountAsMondayMorning() {
+        let model = [[
+            reading(hours: 80, 0.5, limitID: "weekly_opus", scope: .model),
+            reading(hours: 81, 1.0, limitID: "weekly_opus", scope: .model),
+        ]]
+        #expect(!earned(evaluate(model), .mondayMorning).isEarned)
+    }
+
+    @Test func roundTheClockNeedsARiseInEveryQuarter() {
+        let all = [[
+            reading(hours: 1, 0.1), reading(hours: 2, 0.2),
+            reading(hours: 7, 0.3), reading(hours: 8, 0.4),
+            reading(hours: 13, 0.5), reading(hours: 14, 0.6),
+            reading(hours: 19, 0.7), reading(hours: 20, 0.8),
+        ]]
+        #expect(earned(evaluate(all), .roundTheClock).isEarned)
+
+        let three = [[
+            reading(hours: 1, 0.1), reading(hours: 2, 0.2),
+            reading(hours: 7, 0.3), reading(hours: 8, 0.4),
+            reading(hours: 13, 0.5), reading(hours: 14, 0.6),
+        ]]
+        let miss = earned(evaluate(three), .roundTheClock)
+        #expect(!miss.isEarned)
+        #expect(miss.detail == "3 of 4 quarters so far.")
+    }
+
+    @Test func thirtyInARowAndAGapOfTwentyNine() {
+        var rows = [reading(hours: 0, 0)]
+        for day in 0..<30 {
+            rows.append(reading(hours: Double(day) * 24 + 10, Double(day + 1) * 0.01))
+        }
+        #expect(earned(evaluate([rows]), .thirtyInARow).isEarned)
+
+        let short = Achievements.evaluate(series: [Array(rows.prefix(30))], observedDays: [], calendar: utc)
+        // prefix(30) is the zero plus 29 rises
+        #expect(!earned(short, .thirtyInARow).isEarned)
+        #expect(earned(short, .thirtyInARow).detail == "29 of 30 days so far.")
+    }
+
+    @Test func hundredInARowAndNinetyNineIsShort() {
+        var rows = [reading(hours: 0, 0)]
+        for day in 0..<100 {
+            rows.append(reading(hours: Double(day) * 24 + 10, 0.01 + Double(day) * 0.001))
+        }
+        #expect(earned(evaluate([rows]), .hundredInARow).isEarned)
+
+        let short = Achievements.evaluate(series: [Array(rows.prefix(100))], observedDays: [], calendar: utc)
+        #expect(!earned(short, .hundredInARow).isEarned)
+        #expect(earned(short, .hundredInARow).detail == "99 of 100 days so far.")
+    }
+
+    @Test func cleanMonthNeedsThirtyWatchedDays() {
+        let quiet = [[reading(hours: 5, 0.3), reading(hours: 29 * 24, 0.4)]]
+        #expect(earned(evaluate(quiet, days: days(30)), .cleanMonth).isEarned)
+        #expect(!earned(evaluate(quiet, days: days(29)), .cleanMonth).isEarned)
+    }
+
+    @Test func comebackIsACleanWeekAfterThreeFullLimits() {
+        let one = [reading(hours: 2, 0.5), reading(hours: 3, 1.0), reading(hours: 4, 0.0)]
+        let two = [
+            reading(hours: 10, 0.5, limitID: "session", label: "Session"),
+            reading(hours: 11, 1.0, limitID: "session", label: "Session"),
+            reading(hours: 12, 0.0, limitID: "session", label: "Session"),
+        ]
+        let three = [
+            reading(hours: 20, 0.5, trackingID: "acct-2"),
+            reading(hours: 21, 1.0, trackingID: "acct-2"),
+            reading(hours: 22, 0.0, trackingID: "acct-2"),
+        ]
+        let later = [reading(hours: 8 * 24, 0.2), reading(hours: 13 * 24, 0.3)]
+        let watched = days(14)
+        #expect(earned(evaluate([one, two, three, later], days: watched), .comeback).isEarned)
+
+        #expect(!earned(evaluate([one, two, later], days: watched), .comeback).isEarned)
+    }
+
+    @Test func marathonWeekCoversAFlatStretchOnWatchedDays() {
+        let high = [[
+            reading(hours: 0, 0.91),
+            reading(hours: 6 * 24, 0.91),
+            reading(hours: 6 * 24 + 1, 0.5),
+        ]]
+        #expect(earned(evaluate(high, days: days(7)), .marathonWeek).isEarned)
+        #expect(!earned(evaluate(high, days: days(6)), .marathonWeek).isEarned)
+
+        let shy = [[
+            reading(hours: 0, 0.89),
+            reading(hours: 6 * 24, 0.89),
+        ]]
+        #expect(!earned(evaluate(shy, days: days(7)), .marathonWeek).isEarned)
+    }
+
+    @Test func twoHorsesNeedOverlappingProviders() {
+        let claude = [reading(hours: 0, 0.2), reading(hours: 10, 0.3)]
+        let grok = [
+            reading(hours: 2, 0.2, provider: .grok, trackingID: "acct-g", limitID: "weekly"),
+            reading(hours: 8, 0.3, provider: .grok, trackingID: "acct-g", limitID: "weekly"),
+        ]
+        #expect(earned(evaluate([claude, grok]), .twoHorses).isEarned)
+
+        let later = [
+            reading(hours: 20, 0.2, provider: .grok, trackingID: "acct-g", limitID: "weekly"),
+            reading(hours: 22, 0.3, provider: .grok, trackingID: "acct-g", limitID: "weekly"),
+        ]
+        #expect(!earned(evaluate([claude, later]), .twoHorses).isEarned)
+    }
+
+    @Test func fullStableNeedsAllThreeProvidersTogether() {
+        let claude = [reading(hours: 0, 0.2), reading(hours: 10, 0.3)]
+        let grok = [
+            reading(hours: 1, 0.2, provider: .grok, trackingID: "acct-g", limitID: "weekly"),
+            reading(hours: 9, 0.3, provider: .grok, trackingID: "acct-g", limitID: "weekly"),
+        ]
+        let gpt = [
+            reading(hours: 2, 0.2, provider: .chatGPT, trackingID: "acct-c", limitID: "weekly"),
+            reading(hours: 8, 0.3, provider: .chatGPT, trackingID: "acct-c", limitID: "weekly"),
+        ]
+        #expect(earned(evaluate([claude, grok, gpt]), .fullStable).isEarned)
+        #expect(!earned(evaluate([claude, grok]), .fullStable).isEarned)
+    }
+
+    @Test func twinsAreTwoAccountsOfOneProvider() {
+        let first = [reading(hours: 0, 0.2), reading(hours: 10, 0.3)]
+        let second = [
+            reading(hours: 2, 0.2, trackingID: "acct-2"),
+            reading(hours: 8, 0.3, trackingID: "acct-2"),
+        ]
+        #expect(earned(evaluate([first, second]), .twins).isEarned)
+
+        let sameAccount = [
+            reading(hours: 2, 0.2, limitID: "session", label: "Session"),
+            reading(hours: 8, 0.3, limitID: "session", label: "Session"),
+        ]
+        #expect(!earned(evaluate([first, sameAccount]), .twins).isEarned)
+    }
+
+    @Test func fiveASideNeedsFiveAccountsTogether() {
+        let five = (0..<5).map { index in
+            [
+                reading(hours: 0, 0.2, trackingID: "acct-\(index)", limitID: "L\(index)"),
+                reading(hours: 8, 0.3, trackingID: "acct-\(index)", limitID: "L\(index)"),
+            ]
+        }
+        #expect(earned(evaluate(five), .fiveASide).isEarned)
+        #expect(earned(evaluate(Array(five.prefix(4))), .fiveASide).detail == "4 of 5 so far.")
+    }
+
+    @Test func cooldownIsADayUnderTenAfterAFull() {
+        let hit = [[
+            reading(hours: 0, 0.5),
+            reading(hours: 1, 1.0),
+            reading(hours: 2, 0.05),
+            reading(hours: 26, 0.05),
+        ]]
+        #expect(earned(evaluate(hit), .cooldown).isEarned)
+
+        let bounced = [[
+            reading(hours: 0, 0.5),
+            reading(hours: 1, 1.0),
+            reading(hours: 2, 0.05),
+            reading(hours: 25, 1.0),
+        ]]
+        #expect(!earned(evaluate(bounced), .cooldown).isEarned)
+
+        let shy = [[
+            reading(hours: 0, 0.5),
+            reading(hours: 1, 1.0),
+            reading(hours: 2, 0.05),
+            reading(hours: 25, 0.05),
+        ]]
+        #expect(!earned(evaluate(shy), .cooldown).isEarned)
+    }
+
+    @Test func rationingHoldsAWeeklyLimitUnderFiftyForAWeek() {
+        let quiet = [[
+            reading(hours: 0, 0.3, resetHours: 7 * 24),
+            reading(hours: 6 * 24, 0.4, resetHours: 24),
+        ]]
+        #expect(earned(evaluate(quiet, days: days(7)), .rationing).isEarned)
+
+        let over = [[
+            reading(hours: 0, 0.3, resetHours: 7 * 24),
+            reading(hours: 6 * 24, 0.51, resetHours: 24),
+        ]]
+        #expect(!earned(evaluate(over, days: days(7)), .rationing).isEarned)
+        #expect(!earned(evaluate(quiet, days: days(6)), .rationing).isEarned)
+    }
+
+    @Test func downToTheWireHitsNinetyNineAndTheWeekEnds() {
+        let hit = [[
+            reading(hours: 0, 0.5, resetHours: 7 * 24),
+            reading(hours: 5 * 24, 0.99, resetHours: 2 * 24),
+            reading(hours: 7 * 24, 0.05, resetHours: 7 * 24),
+        ]]
+        #expect(earned(evaluate(hit), .downToTheWire).isEarned)
+
+        let full = [[
+            reading(hours: 0, 0.5, resetHours: 7 * 24),
+            reading(hours: 5 * 24, 1.0, resetHours: 2 * 24),
+            reading(hours: 7 * 24, 0.05, resetHours: 7 * 24),
+        ]]
+        #expect(!earned(evaluate(full), .downToTheWire).isEarned)
+
+        let shy = [[
+            reading(hours: 0, 0.5, resetHours: 7 * 24),
+            reading(hours: 5 * 24, 0.98, resetHours: 2 * 24),
+            reading(hours: 7 * 24, 0.05, resetHours: 7 * 24),
+        ]]
+        #expect(!earned(evaluate(shy), .downToTheWire).isEarned)
+    }
+
+    @Test func bounceIsFullThenUnderTenInsideAnHour() {
+        let hit = [[reading(hours: 0, 0.5), reading(hours: 1, 1.0), reading(hours: 1.5, 0.05)]]
+        #expect(earned(evaluate(hit), .bounce).isEarned)
+        #expect(earned(evaluate(hit), .bounce).detail == "Full to under 10 % in 30m on Week.")
+
+        let slow = [[reading(hours: 0, 0.5), reading(hours: 1, 1.0), reading(hours: 2 + 1.0 / 60.0, 0.05)]]
+        #expect(!earned(evaluate(slow), .bounce).isEarned)
+
+        let notLow = [[reading(hours: 0, 0.5), reading(hours: 1, 1.0), reading(hours: 1.5, 0.15)]]
+        #expect(!earned(evaluate(notLow), .bounce).isEarned)
+    }
+
+    @Test func firstLightIsTheFirstReading() {
+        let one = [[reading(hours: 3, 0.2)]]
+        #expect(earned(evaluate(one), .firstLight).isEarned)
+        #expect(!earned(evaluate([]), .firstLight).isEarned)
+    }
+
+    @Test func oldTimerNeedsNinetyDaysOfLog() {
+        let long = [[reading(hours: 0, 0.1), reading(hours: 90 * 24, 0.2)]]
+        #expect(earned(evaluate(long), .oldTimer).isEarned)
+
+        let shy = [[reading(hours: 0, 0.1), reading(hours: 89 * 24, 0.2)]]
+        #expect(!earned(evaluate(shy), .oldTimer).isEarned)
+    }
+
+    @Test func theAnswerTracksEveryOtherKind() {
+        let empty = evaluate([])
+        let needed = Achievements.Kind.allCases.count - 1
+        #expect(!earned(empty, .theAnswer).isEarned)
+        #expect(earned(empty, .theAnswer).detail == "0 of \(needed) so far.")
+
+        let one = evaluate([[reading(hours: 0, 0.1)]])
+        #expect(earned(one, .firstLight).isEarned)
+        #expect(earned(one, .theAnswer).detail == "1 of \(needed) so far.")
+        #expect(!earned(one, .theAnswer).isEarned)
     }
 
     @Test func twoFullLimitsOnOneAccountAreTwoWaitsWithDistinctIDs() {

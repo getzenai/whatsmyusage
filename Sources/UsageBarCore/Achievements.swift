@@ -128,8 +128,29 @@ public enum Achievements {
         case fromZero
         case slowBurn
         case nightOwl
+        case dawnPatrol
+        case weekendWarrior
+        case mondayMorning
+        case fridayFinisher
+        case roundTheClock
         case weekStreak
+        case thirtyInARow
+        case hundredInARow
         case cleanWeek
+        case cleanMonth
+        case comeback
+        case marathonWeek
+        case twoHorses
+        case fullStable
+        case twins
+        case fiveASide
+        case cooldown
+        case rationing
+        case downToTheWire
+        case bounce
+        case firstLight
+        case oldTimer
+        case theAnswer
 
         public var title: String {
             switch self {
@@ -152,8 +173,29 @@ public enum Achievements {
             case .fromZero: "From zero"
             case .slowBurn: "Slow burn"
             case .nightOwl: "Night shift"
+            case .dawnPatrol: "Dawn patrol"
+            case .weekendWarrior: "Weekend warrior"
+            case .mondayMorning: "Monday morning"
+            case .fridayFinisher: "Friday finisher"
+            case .roundTheClock: "Round the clock"
             case .weekStreak: "Seven in a row"
+            case .thirtyInARow: "Thirty in a row"
+            case .hundredInARow: "Hundred in a row"
             case .cleanWeek: "Clean week"
+            case .cleanMonth: "Clean month"
+            case .comeback: "Comeback"
+            case .marathonWeek: "Marathon week"
+            case .twoHorses: "Two horses"
+            case .fullStable: "Full stable"
+            case .twins: "Twins"
+            case .fiveASide: "Five-a-side"
+            case .cooldown: "Cooldown"
+            case .rationing: "Rationing"
+            case .downToTheWire: "Down to the wire"
+            case .bounce: "Bounce"
+            case .firstLight: "First light"
+            case .oldTimer: "Old timer"
+            case .theAnswer: "The answer"
             }
         }
 
@@ -163,8 +205,11 @@ public enum Achievements {
             case .fullHouse, .grandSlam, .everythingAtOnce, .splitPersonality: .simultaneous
             case .longestWait, .longHaul, .overnight, .lostWeekend, .patience: .waiting
             case .speedrun, .sprint, .fromZero, .slowBurn: .pace
-            case .nightOwl: .clock
-            case .weekStreak, .cleanWeek: .stamina
+            case .nightOwl, .dawnPatrol, .weekendWarrior, .mondayMorning, .fridayFinisher, .roundTheClock: .clock
+            case .weekStreak, .thirtyInARow, .hundredInARow, .cleanWeek, .cleanMonth, .comeback, .marathonWeek: .stamina
+            case .twoHorses, .fullStable, .twins, .fiveASide: .collection
+            case .cooldown, .rationing, .downToTheWire, .bounce: .husbandry
+            case .firstLight, .oldTimer, .theAnswer: .log
             }
         }
 
@@ -191,8 +236,29 @@ public enum Achievements {
             case .fromZero: "Go from 0 % to full on the same day."
             case .slowBurn: "Take six days to fill a weekly limit."
             case .nightOwl: "Burn limit between 1 and 5 in the morning."
+            case .dawnPatrol: "Burn limit between 5 and 7 in the morning."
+            case .weekendWarrior: "Fill a limit on Saturday and on Sunday."
+            case .mondayMorning: "Fill a limit before 10 on a Monday."
+            case .fridayFinisher: "Fill a limit after 18 on a Friday."
+            case .roundTheClock: "Use something in all four quarters of one day."
             case .weekStreak: "Use something seven days in a row."
+            case .thirtyInARow: "Use something thirty days in a row."
+            case .hundredInARow: "Use something a hundred days in a row."
             case .cleanWeek: "Seven days watched without hitting a single limit."
+            case .cleanMonth: "Thirty days watched without hitting a single limit."
+            case .comeback: "A clean week right after a week with three full limits."
+            case .marathonWeek: "Seven watched days that each went over 90 %."
+            case .twoHorses: "Watch two providers at the same time."
+            case .fullStable: "Watch all three providers at the same time."
+            case .twins: "Watch two accounts of the same provider."
+            case .fiveASide: "Watch five accounts at the same time."
+            case .cooldown: "Drop under 10 % after a full and stay there a day."
+            case .rationing: "Keep a weekly limit under 50 % for a whole week."
+            case .downToTheWire: "Hit 99 % and finish the week without going full."
+            case .bounce: "Go full and back under 10 % within an hour."
+            case .firstLight: "Take the first measurement."
+            case .oldTimer: "Keep a log that stretches ninety days."
+            case .theAnswer: "Earn every other achievement."
             }
         }
     }
@@ -234,8 +300,10 @@ public enum Achievements {
     ) -> [Achievement] {
         let runs = series.flatMap { fullRuns($0) }
         let accountRuns = runs.filter { $0.scope == .account }
-        return Kind.allCases.map { kind in
+        let accountSeries = series.filter { $0.first?.scope == .account }
+        let rest: [Achievement] = Kind.allCases.compactMap { kind in
             switch kind {
+            case .theAnswer: nil
             case .firstMaxOut: firstMaxOut(runs)
             case .regular: countedMaxOuts(accountRuns, needed: 10, kind: .regular)
             case .century: countedMaxOuts(accountRuns, needed: 100, kind: .century)
@@ -254,10 +322,40 @@ public enum Achievements {
             case .sprint: speedrun(series, within: 3600, kind: .sprint)
             case .fromZero: fromZero(series, calendar: calendar)
             case .slowBurn: slowBurn(series)
-            case .nightOwl: nightOwl(series, calendar: calendar)
-            case .weekStreak: weekStreak(series, calendar: calendar)
-            case .cleanWeek: cleanWeek(accountRuns, observedDays: observedDays, calendar: calendar)
+            case .nightOwl: hourWindow(series, calendar: calendar, hours: 1..<5, kind: .nightOwl)
+            case .dawnPatrol: hourWindow(series, calendar: calendar, hours: 5..<7, kind: .dawnPatrol)
+            case .weekendWarrior: weekendWarrior(accountRuns, calendar: calendar)
+            case .mondayMorning: becameFull(accountSeries, calendar: calendar, kind: .mondayMorning) { date in
+                calendar.component(.weekday, from: date) == 2
+                    && calendar.component(.hour, from: date) < 10
             }
+            case .fridayFinisher: becameFull(accountSeries, calendar: calendar, kind: .fridayFinisher) { date in
+                calendar.component(.weekday, from: date) == 6
+                    && calendar.component(.hour, from: date) >= 18
+            }
+            case .roundTheClock: roundTheClock(series, calendar: calendar)
+            case .weekStreak: usageStreak(series, needed: 7, kind: .weekStreak, calendar: calendar)
+            case .thirtyInARow: usageStreak(series, needed: 30, kind: .thirtyInARow, calendar: calendar)
+            case .hundredInARow: usageStreak(series, needed: 100, kind: .hundredInARow, calendar: calendar)
+            case .cleanWeek: cleanStreak(accountRuns, observedDays: observedDays, needed: 7, kind: .cleanWeek, calendar: calendar)
+            case .cleanMonth: cleanStreak(accountRuns, observedDays: observedDays, needed: 30, kind: .cleanMonth, calendar: calendar)
+            case .comeback: comeback(accountRuns, observedDays: observedDays, calendar: calendar)
+            case .marathonWeek: marathonWeek(series, observedDays: observedDays, calendar: calendar)
+            case .twoHorses: overlappingWatched(series, needed: 2, kind: .twoHorses, by: \.provider)
+            case .fullStable: overlappingWatched(series, needed: 3, kind: .fullStable, by: \.provider)
+            case .twins: twins(series)
+            case .fiveASide: overlappingWatched(series, needed: 5, kind: .fiveASide, by: \.trackingID)
+            case .cooldown: cooldown(accountSeries)
+            case .rationing: rationing(accountSeries, observedDays: observedDays, calendar: calendar)
+            case .downToTheWire: downToTheWire(accountSeries)
+            case .bounce: bounce(accountSeries)
+            case .firstLight: firstLight(series)
+            case .oldTimer: oldTimer(series)
+            }
+        }
+        let answer = theAnswer(rest)
+        return Kind.allCases.map { kind in
+            kind == .theAnswer ? answer : rest.first { $0.kind == kind }!
         }
     }
 
@@ -558,15 +656,9 @@ public enum Achievements {
     private static func slowBurn(_ series: [[UsageMeasurement]]) -> Achievement {
         // A weekly limit is one that still had more than four days until reset on
         // some reading. Limit names are the provider's, not ours.
-        let weekHorizon: TimeInterval = 4 * 86_400
         let needed: TimeInterval = 6 * 86_400
         var best: (at: Date, took: TimeInterval, label: String)?
-        for rows in series {
-            let weekly = rows.contains { row in
-                guard let reset = row.resetsAt else { return false }
-                return reset.timeIntervalSince(row.observedAt) > weekHorizon
-            }
-            guard weekly else { continue }
+        for rows in series where looksWeekly(rows) {
             var lastLow: Date?
             for row in rows {
                 if row.utilization <= 0.1 { lastLow = row.observedAt }
@@ -586,47 +678,129 @@ public enum Achievements {
         )
     }
 
-    private static func nightOwl(_ series: [[UsageMeasurement]], calendar: Calendar) -> Achievement {
-        var earliest: Date?
-        for rows in series {
-            for (index, row) in rows.enumerated() where index > 0 {
-                guard row.utilization > rows[index - 1].utilization else { continue }
-                let hour = calendar.component(.hour, from: row.observedAt)
-                guard hour >= 1, hour < 5 else { continue }
-                if earliest == nil || row.observedAt < earliest! { earliest = row.observedAt }
-            }
+    /// A rise is two neighbouring change points where utilization went up. The later
+    /// reading is when we *saw* the burn — a value that merely sat in the window
+    /// because the Mac woke up there is not usage.
+    private static func rises(
+        _ series: [[UsageMeasurement]]
+    ) -> [(UsageMeasurement, UsageMeasurement)] {
+        series.flatMap { rows in
+            zip(rows, rows.dropFirst()).filter { $1.utilization > $0.utilization }
         }
-        guard let earliest else { return locked(.nightOwl) }
+    }
+
+    private static func hourWindow(
+        _ series: [[UsageMeasurement]],
+        calendar: Calendar,
+        hours: Range<Int>,
+        kind: Kind
+    ) -> Achievement {
+        var earliest: Date?
+        for (_, row) in rises(series) {
+            let hour = calendar.component(.hour, from: row.observedAt)
+            guard hours.contains(hour) else { continue }
+            if earliest == nil || row.observedAt < earliest! { earliest = row.observedAt }
+        }
+        guard let earliest else { return locked(kind) }
         return Achievement(
-            kind: .nightOwl,
+            kind: kind,
             earnedAt: earliest,
             detail: "Working at \(Self.clock(earliest, calendar: calendar)) on \(Self.day(earliest))."
         )
     }
 
-    private static func weekStreak(_ series: [[UsageMeasurement]], calendar: Calendar) -> Achievement {
-        var days: Set<Date> = []
-        for rows in series {
-            for (index, row) in rows.enumerated() where index > 0 {
-                if row.utilization > rows[index - 1].utilization {
-                    days.insert(calendar.startOfDay(for: row.observedAt))
-                }
-            }
+    private static func becameFull(
+        _ series: [[UsageMeasurement]],
+        calendar: Calendar,
+        kind: Kind,
+        matches: (Date) -> Bool
+    ) -> Achievement {
+        var earliest: Date?
+        for (_, row) in rises(series) {
+            guard UsageHistory.isFull(row), matches(row.observedAt) else { continue }
+            if earliest == nil || row.observedAt < earliest! { earliest = row.observedAt }
         }
-        let (length, end) = longestRun(of: days, calendar: calendar)
-        guard length >= 7, let end else {
-            return Achievement(
-                kind: .weekStreak,
-                earnedAt: nil,
-                detail: "\(length) of 7 days so far."
-            )
-        }
-        return Achievement(kind: .weekStreak, earnedAt: end, detail: "\(length) days in a row.")
+        guard let earliest else { return locked(kind) }
+        return Achievement(
+            kind: kind,
+            earnedAt: earliest,
+            detail: "Full at \(Self.clock(earliest, calendar: calendar)) on \(Self.day(earliest))."
+        )
     }
 
-    private static func cleanWeek(
+    private static func weekendWarrior(_ runs: [FullRun], calendar: Calendar) -> Achievement {
+        let blocked = Set(runs.flatMap { run -> [Date] in
+            calendar.days(from: run.firstSeenFull, through: run.end ?? run.lastSeenFull)
+        })
+        var best: Date?
+        for day in blocked {
+            guard calendar.component(.weekday, from: day) == 7 else { continue }
+            guard let sunday = calendar.date(byAdding: .day, value: 1, to: day),
+                  blocked.contains(sunday) else { continue }
+            if best == nil || sunday < best! { best = sunday }
+        }
+        guard let best else { return locked(.weekendWarrior) }
+        return Achievement(
+            kind: .weekendWarrior,
+            earnedAt: best,
+            detail: "Saturday and Sunday full on the weekend of \(Self.day(best))."
+        )
+    }
+
+    private static func roundTheClock(
+        _ series: [[UsageMeasurement]],
+        calendar: Calendar
+    ) -> Achievement {
+        var byDay: [Date: Set<Int>] = [:]
+        for (_, row) in rises(series) {
+            let day = calendar.startOfDay(for: row.observedAt)
+            byDay[day, default: []].insert(calendar.component(.hour, from: row.observedAt) / 6)
+        }
+        var best: (day: Date, count: Int)?
+        for (day, quarters) in byDay {
+            if best == nil || quarters.count > best!.count || (quarters.count == best!.count && day < best!.day) {
+                best = (day, quarters.count)
+            }
+        }
+        guard let best, best.count >= 4 else {
+            if let best, best.count > 0 {
+                return Achievement(
+                    kind: .roundTheClock,
+                    earnedAt: nil,
+                    detail: "\(best.count) of 4 quarters so far."
+                )
+            }
+            return locked(.roundTheClock)
+        }
+        return Achievement(
+            kind: .roundTheClock,
+            earnedAt: best.day,
+            detail: "All four quarters on \(Self.day(best.day))."
+        )
+    }
+
+    private static func usageStreak(
+        _ series: [[UsageMeasurement]],
+        needed: Int,
+        kind: Kind,
+        calendar: Calendar
+    ) -> Achievement {
+        var days: Set<Date> = []
+        for (_, row) in rises(series) {
+            days.insert(calendar.startOfDay(for: row.observedAt))
+        }
+        let (length, end) = longestRun(of: days, calendar: calendar)
+        guard length >= needed, let end else {
+            return Achievement(kind: kind, earnedAt: nil, detail: "\(length) of \(needed) days so far.")
+        }
+        return Achievement(kind: kind, earnedAt: end, detail: "\(length) days in a row.")
+    }
+
+    private static func cleanStreak(
         _ runs: [FullRun],
         observedDays: Set<Date>,
+        needed: Int,
+        kind: Kind,
         calendar: Calendar
     ) -> Achievement {
         let blocked = Set(runs.flatMap { run -> [Date] in
@@ -634,10 +808,351 @@ public enum Achievements {
         })
         let clean = observedDays.subtracting(blocked)
         let (length, end) = longestRun(of: clean, calendar: calendar)
-        guard length >= 7, let end else {
-            return Achievement(kind: .cleanWeek, earnedAt: nil, detail: "\(length) of 7 clean days.")
+        guard length >= needed, let end else {
+            return Achievement(kind: kind, earnedAt: nil, detail: "\(length) of \(needed) clean days.")
         }
-        return Achievement(kind: .cleanWeek, earnedAt: end, detail: "\(length) days without a single block.")
+        return Achievement(kind: kind, earnedAt: end, detail: "\(length) days without a single block.")
+    }
+
+    private static func comeback(
+        _ runs: [FullRun],
+        observedDays: Set<Date>,
+        calendar: Calendar
+    ) -> Achievement {
+        let blocked = Set(runs.flatMap { run -> [Date] in
+            calendar.days(from: run.firstSeenFull, through: run.end ?? run.lastSeenFull)
+        })
+        let sorted = observedDays.sorted()
+        var hit: Date?
+        for start in sorted {
+            let messy = (0..<7).compactMap { calendar.date(byAdding: .day, value: $0, to: start) }
+            guard messy.count == 7, messy.allSatisfy(observedDays.contains) else { continue }
+            let distinct = Set(
+                runs.filter { messy.contains(calendar.startOfDay(for: $0.firstSeenFull)) }
+                    .map { "\($0.trackingID)|\($0.limitID)" }
+            ).count
+            guard distinct >= 3 else { continue }
+            guard let cleanStart = calendar.date(byAdding: .day, value: 7, to: start) else { continue }
+            let clean = (0..<7).compactMap { calendar.date(byAdding: .day, value: $0, to: cleanStart) }
+            guard clean.count == 7,
+                  clean.allSatisfy({ observedDays.contains($0) && !blocked.contains($0) }) else { continue }
+            if hit == nil || clean[6] < hit! { hit = clean[6] }
+        }
+        guard let hit else { return locked(.comeback) }
+        return Achievement(
+            kind: .comeback,
+            earnedAt: hit,
+            detail: "Clean week after three full limits, ending \(Self.day(hit))."
+        )
+    }
+
+    private static func marathonWeek(
+        _ series: [[UsageMeasurement]],
+        observedDays: Set<Date>,
+        calendar: Calendar
+    ) -> Achievement {
+        // A flat stretch at 91 % is one change point plus the last row. The days
+        // in between were still over 90 % — same rule as a wait, measured to the
+        // last high reading, never invented past it. Unwatched days stay out.
+        var highDays: Set<Date> = []
+        for rows in series {
+            var start: Date?
+            var lastHigh: Date?
+            for row in rows {
+                if row.utilization >= 0.9 {
+                    if start == nil { start = row.observedAt }
+                    lastHigh = row.observedAt
+                } else if let began = start, let last = lastHigh {
+                    highDays.formUnion(calendar.days(from: began, through: last))
+                    start = nil
+                    lastHigh = nil
+                }
+            }
+            if let began = start, let last = lastHigh {
+                highDays.formUnion(calendar.days(from: began, through: last))
+            }
+        }
+        let watched = highDays.intersection(observedDays)
+        let (length, end) = longestRun(of: watched, calendar: calendar)
+        guard length >= 7, let end else {
+            return Achievement(
+                kind: .marathonWeek,
+                earnedAt: nil,
+                detail: "\(length) of 7 days over 90 %."
+            )
+        }
+        return Achievement(
+            kind: .marathonWeek,
+            earnedAt: end,
+            detail: "\(length) days over 90 %."
+        )
+    }
+
+    private static func overlappingWatched<Key: Hashable>(
+        _ series: [[UsageMeasurement]],
+        needed: Int,
+        kind: Kind,
+        by key: KeyPath<UsageMeasurement, Key>
+    ) -> Achievement {
+        var grouped: [String: (start: Date, end: Date)] = [:]
+        for rows in series {
+            guard let first = rows.first, let last = rows.last else { continue }
+            let id = "\(first[keyPath: key])"
+            if let existing = grouped[id] {
+                grouped[id] = (min(existing.start, first.observedAt), max(existing.end, last.observedAt))
+            } else {
+                grouped[id] = (first.observedAt, last.observedAt)
+            }
+        }
+        var events: [(time: Date, opening: Bool)] = []
+        for window in grouped.values {
+            events.append((window.start, true))
+            events.append((window.end, false))
+        }
+        events.sort { left, right in
+            if left.time != right.time { return left.time < right.time }
+            return left.opening && !right.opening
+        }
+        var active = 0
+        var best: (at: Date, count: Int)?
+        for event in events {
+            if event.opening {
+                active += 1
+                if best == nil || active > best!.count {
+                    best = (event.time, active)
+                }
+            } else {
+                active -= 1
+            }
+        }
+        guard let best, best.count >= needed else {
+            if let best, best.count > 0 {
+                return Achievement(kind: kind, earnedAt: nil, detail: "\(best.count) of \(needed) so far.")
+            }
+            return locked(kind)
+        }
+        let noun: String
+        switch kind {
+        case .twoHorses, .fullStable:
+            noun = best.count == 1 ? "provider" : "providers"
+        default:
+            noun = best.count == 1 ? "account" : "accounts"
+        }
+        return Achievement(
+            kind: kind,
+            earnedAt: best.at,
+            detail: kind == .fullStable
+                ? "All three providers watched together on \(Self.day(best.at))."
+                : "\(best.count) \(noun) watched together on \(Self.day(best.at))."
+        )
+    }
+
+    private static func twins(_ series: [[UsageMeasurement]]) -> Achievement {
+        var byProvider: [Provider: [String: (start: Date, end: Date)]] = [:]
+        for rows in series {
+            guard let first = rows.first, let last = rows.last else { continue }
+            var accounts = byProvider[first.provider] ?? [:]
+            if let existing = accounts[first.trackingID] {
+                accounts[first.trackingID] = (
+                    min(existing.start, first.observedAt),
+                    max(existing.end, last.observedAt)
+                )
+            } else {
+                accounts[first.trackingID] = (first.observedAt, last.observedAt)
+            }
+            byProvider[first.provider] = accounts
+        }
+        var best: Date?
+        for accounts in byProvider.values {
+            let windows = Array(accounts.values)
+            for i in windows.indices {
+                for j in windows.indices where j > i {
+                    let start = max(windows[i].start, windows[j].start)
+                    let end = min(windows[i].end, windows[j].end)
+                    guard start <= end else { continue }
+                    if best == nil || start < best! { best = start }
+                }
+            }
+        }
+        guard let best else { return locked(.twins) }
+        return Achievement(
+            kind: .twins,
+            earnedAt: best,
+            detail: "Two accounts of one provider watched on \(Self.day(best))."
+        )
+    }
+
+    private static func cooldown(_ series: [[UsageMeasurement]]) -> Achievement {
+        var best: (at: Date, label: String)?
+        for rows in series {
+            for run in fullRuns(rows) {
+                guard let end = run.end else { continue }
+                guard let drop = rows.first(where: { $0.observedAt >= end && $0.utilization <= 0.1 }) else {
+                    continue
+                }
+                let until = drop.observedAt.addingTimeInterval(86_400)
+                let bounced = rows.contains {
+                    $0.observedAt > drop.observedAt && $0.observedAt <= until && UsageHistory.isFull($0)
+                }
+                guard !bounced else { continue }
+                guard rows.contains(where: { $0.observedAt >= until && !UsageHistory.isFull($0) }) else {
+                    continue
+                }
+                if best == nil || drop.observedAt < best!.at {
+                    best = (drop.observedAt, drop.label)
+                }
+            }
+        }
+        guard let best else { return locked(.cooldown) }
+        return Achievement(
+            kind: .cooldown,
+            earnedAt: best.at,
+            detail: "Back under 10 % for 24h on \(best.label)."
+        )
+    }
+
+    private static func rationing(
+        _ series: [[UsageMeasurement]],
+        observedDays: Set<Date>,
+        calendar: Calendar
+    ) -> Achievement {
+        let sorted = observedDays.sorted()
+        var hit: Date?
+        for rows in series where looksWeekly(rows) {
+            for start in sorted {
+                let week = (0..<7).compactMap { calendar.date(byAdding: .day, value: $0, to: start) }
+                guard week.count == 7, week.allSatisfy(observedDays.contains) else { continue }
+                let under = week.allSatisfy { day in
+                    guard let end = calendar.date(byAdding: .day, value: 1, to: day),
+                          let util = rows.last(where: { $0.observedAt < end })?.utilization
+                    else { return false }
+                    return util < 0.5
+                }
+                guard under else { continue }
+                if hit == nil || week[6] < hit! { hit = week[6] }
+            }
+        }
+        guard let hit else { return locked(.rationing) }
+        return Achievement(
+            kind: .rationing,
+            earnedAt: hit,
+            detail: "Under 50 % for 7 days, ending \(Self.day(hit))."
+        )
+    }
+
+    private static func downToTheWire(_ series: [[UsageMeasurement]]) -> Achievement {
+        var best: (at: Date, label: String)?
+        for rows in series where looksWeekly(rows) {
+            var cycleMax = 0.0
+            var cycleFull = false
+            var prevRemaining: TimeInterval?
+            var label = rows.first?.label ?? "Week"
+            for row in rows {
+                label = row.label
+                let remaining = row.resetsAt.map { $0.timeIntervalSince(row.observedAt) }
+                if let remaining, let prev = prevRemaining, remaining > prev + 3 * 86_400 {
+                    if cycleMax >= 0.99, !cycleFull {
+                        if best == nil || row.observedAt < best!.at {
+                            best = (row.observedAt, label)
+                        }
+                    }
+                    cycleMax = 0
+                    cycleFull = false
+                }
+                cycleMax = max(cycleMax, row.utilization)
+                if UsageHistory.isFull(row) { cycleFull = true }
+                prevRemaining = remaining
+            }
+        }
+        guard let best else { return locked(.downToTheWire) }
+        return Achievement(
+            kind: .downToTheWire,
+            earnedAt: best.at,
+            detail: "99 % and the week ended on \(best.label)."
+        )
+    }
+
+    private static func bounce(_ series: [[UsageMeasurement]]) -> Achievement {
+        var best: (at: Date, took: TimeInterval, label: String)?
+        for rows in series {
+            var fullSince: Date?
+            var startedAtFirst = false
+            for (index, row) in rows.enumerated() {
+                if UsageHistory.isFull(row) {
+                    if fullSince == nil {
+                        fullSince = row.observedAt
+                        startedAtFirst = index == 0
+                    }
+                    continue
+                }
+                guard let start = fullSince else { continue }
+                let knownStart = startedAtFirst ? nil : start
+                fullSince = nil
+                guard let knownStart, row.utilization <= 0.1 else { continue }
+                let took = row.observedAt.timeIntervalSince(knownStart)
+                if took <= 3600, best == nil || took < best!.took {
+                    best = (row.observedAt, took, row.label)
+                }
+            }
+        }
+        guard let best else { return locked(.bounce) }
+        return Achievement(
+            kind: .bounce,
+            earnedAt: best.at,
+            detail: "Full to under 10 % in \(best.took.hoursAndMinutes) on \(best.label)."
+        )
+    }
+
+    private static func firstLight(_ series: [[UsageMeasurement]]) -> Achievement {
+        let first = series.flatMap { $0 }.min(by: { $0.observedAt < $1.observedAt })
+        guard let first else { return locked(.firstLight) }
+        return Achievement(
+            kind: .firstLight,
+            earnedAt: first.observedAt,
+            detail: "First reading on \(Self.day(first.observedAt))."
+        )
+    }
+
+    private static func oldTimer(_ series: [[UsageMeasurement]]) -> Achievement {
+        let all = series.flatMap { $0 }
+        guard let first = all.min(by: { $0.observedAt < $1.observedAt }),
+              let last = all.max(by: { $0.observedAt < $1.observedAt }) else {
+            return locked(.oldTimer)
+        }
+        let span = last.observedAt.timeIntervalSince(first.observedAt)
+        guard span >= 90 * 86_400 else { return locked(.oldTimer) }
+        return Achievement(
+            kind: .oldTimer,
+            earnedAt: last.observedAt,
+            detail: "Log stretches \(span.hoursAndMinutes) from \(Self.day(first.observedAt))."
+        )
+    }
+
+    /// Derived from whatever else `evaluate` just produced. A new kind in
+    /// `Kind.allCases` is counted automatically — do not list the others here.
+    private static func theAnswer(_ others: [Achievement]) -> Achievement {
+        let needed = others.count
+        let earned = others.filter(\.isEarned)
+        guard earned.count == needed, needed > 0 else {
+            return Achievement(
+                kind: .theAnswer,
+                earnedAt: nil,
+                detail: "\(earned.count) of \(needed) so far."
+            )
+        }
+        let at = earned.compactMap(\.earnedAt).max()
+        return Achievement(
+            kind: .theAnswer,
+            earnedAt: at,
+            detail: "All \(needed) others."
+        )
+    }
+
+    private static func looksWeekly(_ rows: [UsageMeasurement]) -> Bool {
+        rows.contains { row in
+            guard let reset = row.resetsAt else { return false }
+            return reset.timeIntervalSince(row.observedAt) > 4 * 86_400
+        }
     }
 
     /// Longest run of consecutive days, and the day it ended on.
