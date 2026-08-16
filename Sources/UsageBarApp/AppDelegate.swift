@@ -102,6 +102,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func apply(_ byProvider: [Provider: [UsageOutcome]]) {
         let raw = BarPresentation.cards(byProvider: byProvider)
+        AccountNames.persistDefaultNames(raw)
         let prefs = DisplayStore.load()
         statusItem?.pillStyle = prefs.pill
         let shown = prefs.applied(to: raw)
