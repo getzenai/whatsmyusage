@@ -96,3 +96,12 @@ type(scope)!: subject         feat(log)!: rekey the series   (breaking)
 
 `swift test` must pass on the commit you claim it passes on. Run the full
 package suite, not a scoped test filter.
+
+CI (`.github/workflows/ci.yml`, Blacksmith macOS runners) repeats that and adds
+what a green suite does not cover: `swift build -c release -Xswiftc
+-warnings-as-errors` over every source target, and `Scripts/make-app-bundle.sh`.
+`swift test` never compiles `Sources/UsageBarApp`, so the app can be broken with
+285 tests passing. **A new compiler warning fails the build** — both parser bugs
+fixed in `fix(parsers)` were standing warnings. Tests are exempt: the
+swift-testing dependency is deprecated on Swift 6.3 and still required without
+Xcode.

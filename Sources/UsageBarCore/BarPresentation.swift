@@ -287,7 +287,6 @@ public struct BarPresentation: Equatable, Sendable {
     /// The single slot of the compact pill, or nil when there is nothing to show.
     public static func compactSegment(_ cards: [AccountCard]) -> BarSegment? {
         guard let first = cards.first else { return nil }
-        let limits = shortestWindowLimits(cards)
         guard let average = averageOfShortestWindows(cards) else {
             // No reading anywhere: keep the failure visible instead of a green slot.
             let tone: BarTone = cards.contains { $0.tone == .expired } ? .expired
