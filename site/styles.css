@@ -557,7 +557,6 @@ code {
 .ach-list {
   flex: 1 1 auto;
   min-height: 0;
-  max-height: 16.5rem;
   padding: 0 0.95rem 0.95rem;
   overflow: auto;
   border-top: 1px solid oklch(0 0 0 / 0.08);
@@ -621,6 +620,37 @@ code {
 
 .horizon.after-steps {
   padding-top: clamp(3rem, 7vw, 5.5rem);
+}
+
+.flavor {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.6rem;
+  align-items: start;
+  padding: 0 clamp(1.25rem, 5vw, 5rem) clamp(3.5rem, 8vw, 6rem);
+}
+
+.flavor-copy {
+  max-width: 34rem;
+}
+
+.flavor h2 {
+  margin: 0 0 0.55rem;
+  font-weight: 700;
+  font-size: clamp(1.7rem, 3.6vw, 2.35rem);
+  letter-spacing: -0.03em;
+  line-height: 1.12;
+}
+
+.flavor p {
+  margin: 0;
+  color: var(--muted);
+  font-size: clamp(1.05rem, 2vw, 1.25rem);
+}
+
+.flavor .achievements {
+  width: min(22.5rem, 100%);
+  margin-inline: auto;
 }
 
 .horizon h2 {
@@ -836,12 +866,6 @@ code {
   color: inherit;
 }
 
-@media (max-width: 1039px) {
-  .ach-list {
-    max-height: none;
-  }
-}
-
 @media (max-width: 520px) {
   .clock,
   .os-icon {
@@ -888,30 +912,17 @@ code {
   .hero-stage {
     justify-self: center;
   }
+
+  .flavor {
+    grid-template-columns: minmax(0, 1fr) minmax(16rem, 22.5rem);
+    gap: 2.4rem 3rem;
+    align-items: start;
+  }
 }
 
 @media (min-width: 1280px) {
   .hero {
     min-height: min(calc(100svh - var(--menubar)), 46rem);
-  }
-
-  .hero-stage {
-    width: min(40.5rem, 100%);
-    display: grid;
-    grid-template-columns: minmax(0, 20.5rem) minmax(0, 1fr);
-    align-items: stretch;
-    column-gap: 0.85rem;
-    row-gap: 0.95rem;
-  }
-
-  .hero-pill {
-    grid-column: 1 / -1;
-    width: min(20.5rem, 100%);
-    justify-self: start;
-  }
-
-  .ach-list {
-    max-height: none;
   }
 }
 
