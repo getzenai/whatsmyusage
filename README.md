@@ -129,6 +129,36 @@ any lock made the one slot red almost always. The 100 % is already in the mean.
 Everything shut therefore still reads red, and one open account among four full
 ones lands in the warning band.
 
+### Provider incidents
+
+A full meter is one reason nothing works; a provider outage is the other. The
+app reads the public status pages of Claude, OpenAI, xAI and GitHub and shows
+the answer where the question comes up:
+
+- a **banner on the account card** when that provider has an incident, plus a
+  small dot in its pill slot — ink, not a new colour, because the pill's scale
+  means "how full" and a foreign outage must not repaint it;
+- **one grey line** under the accounts when nothing is wrong: `No incidents ·
+  checked 14:52`. A standing "All Systems Operational" trains the eye to skip
+  the spot, and the real outage gets skipped with it — the time is the whole
+  content of that line;
+- **`Status unchecked`** when a page did not answer. Silence is never rendered
+  as health;
+- GitHub belongs to no account, so it speaks on that line instead of a card.
+
+Settings › *Status tracking* switches the whole thing off — no line, no banner,
+**and no requests** — or any single page, or the services within one. Defaults:
+Claude `claude.ai`, `Claude Code`, `Claude API`; xAI `Grok (Web)` and
+`Single Sign-On`; GitHub `Actions`, `API Requests`, `Pull Requests`, `Issues`.
+OpenAI has no default: its page lists two services called "Login" and its
+incidents name no service at all, so filtering by name would only pretend to
+filter. What each page really sends is in
+[`docs/RESEARCH_STATUS_PAGES.md`](docs/RESEARCH_STATUS_PAGES.md) — including
+why the badge at the top is never read.
+
+`whatsmyusage pick` ignores all of it. It answers "where is there quota left",
+not "what is broken".
+
 | Key | Action |
 |---|---|
 | ⌘R | Refresh |

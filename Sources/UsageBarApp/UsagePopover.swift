@@ -9,6 +9,7 @@ final class PopoverModel: ObservableObject {
     @Published var cards: [AccountCard] = []
     @Published var waits: [Achievements.CurrentWait] = []
     @Published var hasAchievements = false
+    @Published var status: StatusDigest = .off
 }
 
 /// What a click in the popover does. Held by the controller, not the view.
@@ -35,8 +36,18 @@ struct UsagePopoverView: View {
             } else {
                 ForEach(Array(model.cards.enumerated()), id: \.element.id) { index, card in
                     if index > 0 { Divider().opacity(0.35) }
-                    AccountCardView(card: card, waits: model.waits, onRename: actions.rename)
+                    AccountCardView(
+                        card: card,
+                        waits: model.waits,
+                        disruption: model.status.banner(for: card.provider),
+                        onRename: actions.rename
+                    )
                 }
+            }
+
+            if let line = model.status.line() {
+                Divider().opacity(0.35)
+                StatusLineView(line: line, entries: model.status.entries)
             }
 
             Divider().opacity(0.35)
@@ -68,9 +79,113 @@ struct UsagePopoverView: View {
     }
 }
 
+/// The one line the normal case is allowed to cost. Grey, and the only thing
+/// in it is the time: a standing "All Systems Operational" teaches the eye to
+/// skip the spot, and the real outage gets skipped with it.
+private struct StatusLineView: View {
+    let line: StatusDigest.Line
+    let entries: [StatusDigest.Entry]
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            if line.tone != .quiet {
+                Image(systemName: line.tone == .trouble ? "exclamationmark.triangle.fill" : "questionmark.circle")
+                    .font(.system(size: 11))
+                    .foregroundStyle(line.tone == .trouble ? Color.orange : Color.secondary)
+            }
+            if let url = link {
+                Link(line.text, destination: url)
+                    .font(.system(size: 11))
+                    .foregroundStyle(color)
+            } else {
+                Text(line.text)
+                    .font(.system(size: 11))
+                    .foregroundStyle(color)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 7)
+        .help(helpText)
+    }
+
+    private var color: Color {
+        switch line.tone {
+        case .quiet: .secondary
+        case .trouble: .primary
+        case .unchecked: .secondary
+        }
+    }
+
+    /// Only a line that is about one page gets to open one.
+    private var link: URL? {
+        let troubled = entries.filter { $0.state == .trouble && $0.source.provider == nil }
+        guard troubled.count == 1 else { return nil }
+        return troubled[0].incidents.first?.url ?? troubled[0].source.pageURL
+    }
+
+    private var helpText: String {
+        entries.map { entry in
+            switch entry.state {
+            case .ok: "\(entry.source.displayName): no incidents"
+            case .trouble: "\(entry.source.displayName): \(entry.headline ?? "incident")"
+            case .unchecked: "\(entry.source.displayName): \(entry.headline ?? "not checked")"
+            }
+        }.joined(separator: "\n")
+    }
+}
+
+/// The disruption sits on the account it is about, because that is where the
+/// question "is it me or them?" is asked.
+private struct DisruptionBanner: View {
+    let entry: StatusDigest.Entry
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 6) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 11))
+                .foregroundStyle(Color.orange)
+            VStack(alignment: .leading, spacing: 2) {
+                Link(destination: entry.incidents.first?.url ?? entry.source.pageURL) {
+                    Text(entry.headline ?? "\(entry.source.displayName) reports an incident")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.primary)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .buttonStyle(.plain)
+                if let detail {
+                    Text(detail)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(8)
+        .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
+    }
+
+    /// Which services, and since when — the two things that decide whether the
+    /// incident is the one holding *you* up.
+    private var detail: String? {
+        var bits: [String] = []
+        let names = entry.incidents.flatMap(\.componentNames) + entry.degraded.map(\.name)
+        if !names.isEmpty {
+            var seen: Set<String> = []
+            bits.append(names.filter { seen.insert($0).inserted }.joined(separator: ", "))
+        }
+        if let started = entry.incidents.compactMap(\.startedAt).min() {
+            bits.append("open for \(max(0, Date().timeIntervalSince(started)).hoursAndMinutes)")
+        }
+        return bits.isEmpty ? nil : bits.joined(separator: " · ")
+    }
+}
+
 private struct AccountCardView: View {
     let card: AccountCard
     let waits: [Achievements.CurrentWait]
+    var disruption: StatusDigest.Entry?
     var onRename: (String, String) -> Void
 
     @State private var editing = false
@@ -104,6 +219,10 @@ private struct AccountCardView: View {
                         .help("Click to rename")
                 }
                 Spacer(minLength: 8)
+            }
+
+            if let disruption {
+                DisruptionBanner(entry: disruption)
             }
 
             if let message = card.message {

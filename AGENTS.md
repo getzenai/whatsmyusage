@@ -46,6 +46,13 @@ Read `README.md` and `docs/` before changing parsers or cookie handling.
   account-scoped worst. Claude `locked` stays `unknown` — do not invent it.
 - Do not hardcode limit names the provider invents. Claude's `limits[]` grows
   new `kind` values; unknown ones pass through.
+- Status pages: the badge is not the answer. Claude reported "All Systems
+  Operational" with an incident open. Read `components[]` and the incident
+  list; a component can be degraded with nothing declared. A page that timed
+  out, changed shape, or answered 503 is `unchecked`, never "no incidents" —
+  silence must not render as health. Unknown component words count as trouble,
+  and an incident that names no component counts for the whole source. See
+  `docs/RESEARCH_STATUS_PAGES.md`.
 
 ## Layout
 

@@ -6,8 +6,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: StatusItemController?
     private let settings = SettingsController()
     private let client = UsageClient()
+    private let statusClient = ServiceStatusClient()
     private var refreshTimer: Timer?
     private var inflight: Task<Void, Never>?
+    private var statusInflight: Task<Void, Never>?
     private let usageLog = UsageLogWriter()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -26,6 +28,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem = controller
         settings.onSaved = { [weak self] in self?.refresh() }
         settings.onPreferencesChanged = { [weak self] in self?.reapply() }
+        // Switching a source back on has nothing cached to show — that read was
+        // never made. Ask again instead of leaving the line blank until the
+        // next tick.
+        settings.onStatusPreferencesChanged = { [weak self] in
+            self?.applyStatus()
+            self?.refreshStatus()
+        }
 
         let timer = Timer.scheduledTimer(withTimeInterval: 5 * 60, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.refresh() }
@@ -69,13 +78,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Last successful voucher read per tracking id. A miss does not clear this;
     /// a successful `.none` does.
     private var lastResetAvailable: [String: Int] = [:]
+    private var lastStatusReads: [StatusRead] = []
+    private var lastStatusCheckedAt: Date?
 
     @objc private func openSettings() {
         settings.show()
     }
 
+    /// The status pages are read next to the numbers, not after them: they
+    /// answer a different question and neither should wait for the other.
+    private func refreshStatus() {
+        statusInflight?.cancel()
+        statusInflight = Task { [weak self] in
+            guard let self else { return }
+            let prefs = StatusStore.load()
+            let reads = await self.statusClient.read(preferences: prefs)
+            if Task.isCancelled { return }
+            self.lastStatusReads = reads
+            // Nothing was asked, so nothing was checked — the line must not
+            // print a time that stands for no reading.
+            self.lastStatusCheckedAt = reads.isEmpty ? nil : Date()
+            self.applyStatus()
+        }
+    }
+
+    private func applyStatus() {
+        let digest = StatusDigest.of(
+            reads: lastStatusReads,
+            preferences: StatusStore.load(),
+            checkedAt: lastStatusCheckedAt
+        )
+        statusItem?.update(status: digest)
+        settings.didReadStatus(lastStatusReads)
+    }
+
     private func refresh() {
         guard OnboardingState.didFinishWelcome else { return }
+        refreshStatus()
         inflight?.cancel()
         inflight = Task { [weak self] in
             guard let self else { return }
@@ -115,6 +154,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func reapply() {
         apply(lastByProvider)
+        applyStatus()
     }
 
     private func apply(_ byProvider: [Provider: [UsageOutcome]]) {
