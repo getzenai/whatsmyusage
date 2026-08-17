@@ -456,11 +456,41 @@ struct StatusPreferencesTests {
         #expect(StatusPreferences().watched(.claude, among: renamed) == nil)
     }
 
-    /// OpenAI has no default: 25 services, two of them called "Login", and
-    /// incidents that name none of them.
-    @Test func openAIHasNoDefaultNarrowing() {
-        #expect(StatusPreferences().watched(.openAI, among: components) == nil)
-        #expect(!StatusDefaults.hasDefault(.openAI))
+    /// OpenAI's page is 34 services wide and most of it is not coding. The
+    /// default keeps the Codex surfaces and the sign-in, and it keeps *both*
+    /// components named "Login" — matching by name cannot tell them apart, and
+    /// watching both is the direction that cannot hide an outage.
+    @Test func openAIDefaultsToTheCodingServices() throws {
+        let page = [
+            StatusComponent(id: "o-codex-web", name: "Codex Web", health: .operational),
+            StatusComponent(id: "o-codex-api", name: "Codex API", health: .operational),
+            StatusComponent(id: "o-cli", name: "CLI", health: .operational),
+            StatusComponent(id: "o-login-a", name: "Login", health: .operational),
+            StatusComponent(id: "o-login-b", name: "Login", health: .operational),
+            StatusComponent(id: "o-sora", name: "Sora", health: .operational),
+            StatusComponent(id: "o-ads", name: "Ads Manager", health: .operational),
+        ]
+        let watched = try #require(StatusPreferences().watched(.openAI, among: page))
+        #expect(watched == ["o-codex-web", "o-codex-api", "o-cli", "o-login-a", "o-login-b"])
+        #expect(StatusDefaults.hasDefault(.openAI))
+    }
+
+    /// An OpenAI incident names no service, so narrowing the ticks must not
+    /// narrow the incidents — otherwise the default above would hide outages
+    /// the old "watch everything" showed.
+    @Test func openAIIncidentsSurviveTheCodingDefault() {
+        let page = [
+            StatusComponent(id: "o-codex-web", name: "Codex Web", health: .operational),
+            StatusComponent(id: "o-sora", name: "Sora", health: .operational),
+        ]
+        let read = StatusRead.report(StatusReport(
+            source: .openAI,
+            components: page,
+            incidents: [StatusIncident(id: "i1", title: "Elevated error rates")]
+        ))
+        let entry = StatusDigest.entry(for: read, preferences: StatusPreferences())
+        #expect(entry.state == .trouble)
+        #expect(entry.incidents.map(\.id) == ["i1"])
     }
 
     @Test func tickingStartsFromWhatIsShownAsTicked() {
@@ -472,8 +502,8 @@ struct StatusPreferencesTests {
         #expect(prefs.watchedComponentIDs[.claude] == ["c-code", "c-console"])
     }
 
-    /// A source with no default starts fully ticked, so the first click has to
-    /// remove one rather than leaving one.
+    /// A source whose defaults match nothing on the page starts fully ticked,
+    /// so the first click has to remove one rather than leaving one.
     @Test func tickingASourceWithoutDefaultsStartsFromAll() {
         var prefs = StatusPreferences()
         prefs.toggleComponent("c-web", for: .openAI, among: components)

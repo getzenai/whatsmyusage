@@ -43,17 +43,22 @@ struct ServiceStatusClient {
             case .success(let body): return ServiceStatusParser.xAIFeed(body: body)
             }
         case .claude, .github, .openAI:
-            let summary = await get(source.pageURL.appendingPathComponent("api/v2/summary.json"))
+            // OpenAI's `summary.json` stops after 25 components and its page
+            // has 34 — "Codex API", "CLI" and "VS Code extension" all sit past
+            // the cut. `components.json` has the same shape and the whole list.
+            let listing = source == .openAI ? "api/v2/components.json" : "api/v2/summary.json"
+            let summary = await get(source.pageURL.appendingPathComponent(listing))
             guard case .success(let body) = summary else {
                 if case .failure(let reason) = summary { return .unchecked(source: source, reason: reason) }
                 return .unchecked(source: source, reason: "No answer")
             }
             let read = ServiceStatusParser.statuspageSummary(source: source, body: body)
             guard source == .openAI else { return read }
-            // OpenAI's summary has no `incidents` key and
-            // `incidents/unresolved.json` is a 404 — the open ones have to come
-            // from the full list. A failure here leaves the components as they
-            // were rather than throwing the whole read away.
+            // `components.json` carries no incidents at all, OpenAI's summary
+            // has no `incidents` key either, and `incidents/unresolved.json` is
+            // a 404 — the open ones have to come from the full list. A failure
+            // here leaves the components as they were rather than throwing the
+            // whole read away.
             guard case .success(let incidentBody) = await get(source.pageURL.appendingPathComponent("api/v2/incidents.json")),
                   let incidents = ServiceStatusParser.statuspageIncidents(body: incidentBody)
             else { return read }
