@@ -248,8 +248,9 @@ Static landing page in [`site/`](site/). Push to `main` deploys it to
 
 ### Contributing
 
-Pull requests are welcome. Open an issue first for a larger change. Every PR is
-squashed; title it as a Conventional Commit so the release job can read it.
+Open an issue for bugs or ideas. Pull requests are limited to contributors.
+Every PR is squashed; title it as a Conventional Commit so the release job can
+read it.
 `swift test` must pass on the commit you claim it passes on. Check a title with
 `Scripts/semver.py check-title "feat: …"`. See [AGENTS.md](AGENTS.md) for the
 rest of the rules.
