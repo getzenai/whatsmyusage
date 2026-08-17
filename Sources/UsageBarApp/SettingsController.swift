@@ -35,10 +35,13 @@ final class SettingsController: NSObject, NSWindowDelegate {
     private var model = OnboardingModel()
     var onSaved: (() -> Void)?
     var onPreferencesChanged: (() -> Void)?
+    var onStatusPreferencesChanged: (() -> Void)?
 
     func show(startingAt step: OnboardingStep? = nil) {
         NSApp.setActivationPolicy(.regular)
         model.prefs = DisplayStore.load()
+        model.statusPrefs = StatusStore.load()
+        model.refreshLoginItem()
         if let step {
             model.step = step
         } else if !OnboardingState.didFinishWelcome {
@@ -65,7 +68,10 @@ final class SettingsController: NSObject, NSWindowDelegate {
         let window = NSWindow(contentViewController: hosting)
         window.title = AppIdentity.displayName
         window.styleMask = [.titled, .closable, .resizable]
-        window.setContentSize(NSSize(width: 640, height: 620))
+        // Tall enough that the status rows are on screen when it opens. They
+        // are the last thing in the window, and the last thing is the first
+        // thing nobody finds.
+        window.setContentSize(NSSize(width: 640, height: 700))
         window.delegate = self
         window.isReleasedWhenClosed = false
         window.center()
@@ -73,6 +79,18 @@ final class SettingsController: NSObject, NSWindowDelegate {
         NSApp.activate(ignoringOtherApps: true)
         self.hosting = hosting
         self.window = window
+    }
+
+    /// Settings lists the services a page really has today, not a copy of them
+    /// kept here. A source that could not be read keeps whatever it last
+    /// listed, so the ticks do not vanish while the page is down.
+    func didReadStatus(_ reads: [StatusRead]) {
+        for read in reads {
+            guard case .report(let report) = read, !report.components.isEmpty else { continue }
+            model.statusComponents[report.source] = report.components
+        }
+        model.statusPrefs = StatusStore.load()
+        if model.step == .detected { syncRoot() }
     }
 
     func didRefresh(byProvider: [Provider: [UsageOutcome]]) {
@@ -85,6 +103,13 @@ final class SettingsController: NSObject, NSWindowDelegate {
         } else if model.step == .detected {
             syncRoot()
         }
+    }
+
+    /// The user can flip the same switch in System Settings while this window
+    /// sits behind it. Coming back is the moment to ask launchd again.
+    func windowDidBecomeKey(_ notification: Notification) {
+        model.refreshLoginItem()
+        syncRoot()
     }
 
     func windowWillClose(_ notification: Notification) {
@@ -141,8 +166,43 @@ final class SettingsController: NSObject, NSWindowDelegate {
             },
             setPill: { [weak self] style in
                 self?.mutatePrefs { $0.pill = style }
-            }
+            },
+            setStartAtLogin: { [weak self] enabled in
+                self?.setStartAtLogin(enabled)
+            },
+            setStatusTracking: { [weak self] enabled in
+                self?.mutateStatusPrefs { $0.enabled = enabled }
+            },
+            setStatusSource: { [weak self] source, enabled in
+                self?.mutateStatusPrefs { $0.setEnabled(enabled, for: source) }
+            },
+            toggleStatusComponent: { [weak self] source, id in
+                guard let self else { return }
+                let components = self.model.components(for: source)
+                self.mutateStatusPrefs { $0.toggleComponent(id, for: source, among: components) }
+            },
+            openLoginItemSettings: { LoginItem.openSystemSettings() }
         )
+    }
+
+    private func setStartAtLogin(_ enabled: Bool) {
+        do {
+            try LoginItem.set(enabled)
+            model.refreshLoginItem()
+        } catch {
+            // Whatever launchd refused, the checkbox must end up showing what
+            // is actually registered — not what was clicked.
+            model.refreshLoginItem()
+            model.loginItemNote = "macOS refused: \(error.localizedDescription)"
+        }
+        syncRoot()
+    }
+
+    private func mutateStatusPrefs(_ body: (inout StatusPreferences) -> Void) {
+        body(&model.statusPrefs)
+        StatusStore.save(model.statusPrefs)
+        syncRoot()
+        onStatusPreferencesChanged?()
     }
 
     private func mutatePrefs(_ body: (inout DisplayPreferences) -> Void) {
@@ -273,6 +333,28 @@ final class OnboardingModel {
     var pendingDeleteID: String?
     var pendingDeleteMessage: String = ""
     var showingDeleteConfirm = false
+    /// Read from launchd, never stored. `refreshLoginItem` is the only writer.
+    var startsAtLogin = false
+    var loginItemNote: String?
+    var statusPrefs = StatusPreferences()
+    /// What each page listed the last time it answered. xAI publishes no
+    /// service list — its slugs are the static table in `XAIServices`.
+    var statusComponents: [StatusSource: [StatusComponent]] = [.xAI: XAIServices.components]
+
+    func components(for source: StatusSource) -> [StatusComponent] {
+        statusComponents[source] ?? []
+    }
+
+    func refreshLoginItem() {
+        startsAtLogin = LoginItem.isEnabled
+        if !LoginItem.isAvailable {
+            loginItemNote = "Only the installed WhatsMyUsage.app can start itself."
+        } else if LoginItem.needsApproval {
+            loginItemNote = "Login Items in System Settings is holding this back — allow it there."
+        } else {
+            loginItemNote = nil
+        }
+    }
 
     func refreshKeychainSummary() {
         let store = KeychainStore.load()
@@ -306,6 +388,11 @@ struct OnboardingActions {
     var rename: (String, String) -> Void
     var welcomeContinued: () -> Void
     var setPill: (PillStyle) -> Void
+    var setStartAtLogin: (Bool) -> Void
+    var setStatusTracking: (Bool) -> Void
+    var setStatusSource: (StatusSource, Bool) -> Void
+    var toggleStatusComponent: (StatusSource, String) -> Void
+    var openLoginItemSettings: () -> Void
 }
 
 struct OnboardingRoot: View {
@@ -316,16 +403,22 @@ struct OnboardingRoot: View {
         VStack(spacing: 0) {
             stepHeader
             Divider().opacity(0.35)
-            Group {
-                switch model.step {
-                case .welcome: welcome
-                case .paste: paste
-                case .detected: detected
-                case .done: done
+            // The step scrolls. Everything below the accounts used to be cut
+            // off by the window edge with no way to reach it, and an option you
+            // cannot scroll to is an option that does not exist.
+            ScrollView {
+                Group {
+                    switch model.step {
+                    case .welcome: welcome
+                    case .paste: paste
+                    case .detected: detected
+                    case .done: done
+                    }
                 }
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+                .padding(24)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .padding(24)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             Divider().opacity(0.35)
             footer
         }
@@ -437,8 +530,14 @@ struct OnboardingRoot: View {
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
                 .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
+                // The accounts are the point of this window: they are the one
+                // flexible thing here, so without a floor everything below
+                // squeezes them out of it.
+                .frame(minHeight: 160)
             }
             pillPicker
+            loginItemPicker
+            StatusTrackingSection(model: model, actions: actions)
             Spacer(minLength: 0)
         }
         .alert("Remove this login?", isPresented: $model.showingDeleteConfirm) {
@@ -463,6 +562,29 @@ struct OnboardingRoot: View {
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var loginItemPicker: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Toggle(isOn: Binding(
+                get: { model.startsAtLogin },
+                set: { actions.setStartAtLogin($0) }
+            )) {
+                Text("Start at login")
+                    .font(.system(size: 13))
+            }
+            .toggleStyle(.checkbox)
+            .disabled(!LoginItem.isAvailable)
+            if let note = model.loginItemNote {
+                Button(action: actions.openLoginItemSettings) {
+                    Text(note)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .buttonStyle(.plain)
+            }
         }
     }
 
@@ -815,5 +937,127 @@ private struct CookieEditor: NSViewRepresentable {
             guard let view = notification.object as? NSTextView else { return }
             text.wrappedValue = view.string
         }
+    }
+}
+
+/// Status Tracking. One master switch, then one line per page, then the
+/// services that count. The master switch stops the requests too — a switch
+/// that only hides the answer while the app keeps polling would be a lie.
+///
+/// The four pages are always visible: hiding them behind a link traded "does
+/// not get in the way" for "cannot be found", and the second one lost. Only the
+/// services under a page fold away — those are a long list nobody edits twice.
+private struct StatusTrackingSection: View {
+    let model: OnboardingModel
+    let actions: OnboardingActions
+    @State private var expanded: Set<String> = []
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Toggle(isOn: Binding(
+                get: { model.statusPrefs.enabled },
+                set: { actions.setStatusTracking($0) }
+            )) {
+                Text("Status tracking — show provider incidents")
+                    .font(.system(size: 13))
+            }
+            .toggleStyle(.checkbox)
+
+            Text("Reads the public status pages so you can tell a provider outage from a full meter. Off means no line, no banner — and no requests.")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if model.statusPrefs.enabled {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(StatusSource.allCases, id: \.rawValue) { source in
+                        sourceRow(source)
+                    }
+                }
+                .padding(.leading, 18)
+                .padding(.top, 2)
+            }
+        }
+    }
+
+    private func sourceRow(_ source: StatusSource) -> some View {
+        let components = model.components(for: source)
+        let watched = model.statusPrefs.watched(source, among: components)
+        let on = model.statusPrefs.isEnabled(source)
+        return VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 8) {
+                Toggle(isOn: Binding(
+                    get: { on },
+                    set: { actions.setStatusSource(source, $0) }
+                )) {
+                    Text(source.displayName).font(.system(size: 12))
+                }
+                .toggleStyle(.checkbox)
+
+                if on, !components.isEmpty {
+                    let isOpen = expanded.contains(source.rawValue)
+                    Button {
+                        if isOpen { expanded.remove(source.rawValue) } else { expanded.insert(source.rawValue) }
+                    } label: {
+                        // The chevron is the affordance the link was missing:
+                        // it says "there is more under here" before the click.
+                        HStack(spacing: 3) {
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 9, weight: .semibold))
+                                .rotationEffect(.degrees(isOpen ? 90 : 0))
+                            Text(serviceCount(watched, of: components))
+                        }
+                        .font(.system(size: 11))
+                    }
+                    .buttonStyle(.link)
+                    .accessibilityLabel("\(isOpen ? "Hide" : "Show") \(source.displayName) services")
+                }
+                Spacer(minLength: 0)
+            }
+
+            if on, expanded.contains(source.rawValue) {
+                if let note = note(for: source) {
+                    Text(note)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.leading, 18)
+                }
+                // Plain rows, no scroller of their own. A `ScrollView` asks for
+                // no height at all, so under a `maxHeight` it settled at zero
+                // and the list rendered as an empty gap — it did, before this.
+                // The window scrolls instead; one scroller, not three.
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(components) { component in
+                        Toggle(isOn: Binding(
+                            get: { watched?.contains(component.id) ?? true },
+                            set: { _ in actions.toggleStatusComponent(source, component.id) }
+                        )) {
+                            Text(component.name).font(.system(size: 11))
+                        }
+                        .toggleStyle(.checkbox)
+                    }
+                }
+                .padding(.vertical, 4)
+                .padding(.leading, 18)
+            }
+        }
+    }
+
+    /// Only where the page itself behaves in a way the ticks cannot fix.
+    private func note(for source: StatusSource) -> String? {
+        switch source {
+        case .openAI:
+            "These ticks cover services OpenAI reports as degraded. A declared OpenAI incident names no service at all, so it counts whatever you tick here."
+        case .github:
+            "Not tied to an account — GitHub incidents show on the line under the accounts."
+        case .claude, .xAI:
+            nil
+        }
+    }
+
+    private func serviceCount(_ watched: Set<String>?, of components: [StatusComponent]) -> String {
+        let count = watched?.count ?? components.count
+        return "\(count) of \(components.count) services"
     }
 }

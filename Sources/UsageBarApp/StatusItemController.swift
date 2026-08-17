@@ -21,6 +21,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     private var outcomes: [UsageOutcome] = []
     private var lastError: String?
     private var cards: [AccountCard] = []
+    private var status: StatusDigest = .off
 
     override init() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -42,6 +43,14 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         if let button = statusItem.button {
             button.toolTip = tooltip(for: BarPresentation.showing(cards, pill: pillStyle))
         }
+    }
+
+    /// Arrives on its own schedule — a status read is not a usage reading, and
+    /// making one wait for the other would age both.
+    func update(status digest: StatusDigest) {
+        self.status = digest
+        render(BarPresentation.showing(cards, pill: pillStyle))
+        if popover.isShown { refreshPopoverData() }
     }
 
     func update(outcomes: [UsageOutcome], error: String? = nil) {
@@ -68,7 +77,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
 
     private func render(_ bar: BarPresentation) {
         guard let button = statusItem.button else { return }
-        let image = PillImage.draw(segments: bar.segments)
+        let image = PillImage.draw(segments: bar.segments, disrupted: disruptedSegmentIDs)
         button.image = image
         button.title = ""
         button.toolTip = tooltip(for: bar)
@@ -76,13 +85,26 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         statusItem.length = image.size.width + 8
     }
 
+    /// The slots that carry a dot. In compact mode there is one slot for
+    /// everything, so any disrupted account dots it.
+    private var disruptedSegmentIDs: Set<String> {
+        guard pillStyle != .compact else {
+            return status.dotsCompactSlot(cards: cards) ? [BarPresentation.compactTrackingID] : []
+        }
+        return status.dottedTrackingIDs(cards: cards)
+    }
+
     private func tooltip(for bar: BarPresentation) -> String {
         if bar.segments.isEmpty { return AppIdentity.displayName }
-        return bar.segments.map { segment in
+        let dotted = disruptedSegmentIDs
+        let accounts = bar.segments.map { segment in
             let name = AccountNames.name(for: segment.trackingID, default: segment.name)
             let pct = segment.utilization.map(BarPresentation.percentString) ?? "—"
-            return "\(name) \(pct)"
+            let flag = dotted.contains(segment.trackingID) ? " ⚠︎" : ""
+            return "\(name) \(pct)\(flag)"
         }.joined(separator: " · ")
+        guard let line = status.line() else { return accounts }
+        return "\(accounts)\n\(line.text)"
     }
 
     private func accessibilityLabel(for bar: BarPresentation) -> String {
@@ -126,6 +148,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         model.cards = cards
         model.waits = history.waits
         model.hasAchievements = !history.achievements.isEmpty
+        model.status = status
     }
 
     func openPopover() {
@@ -152,7 +175,13 @@ enum PillImage {
     static let height: CGFloat = 14
     static let pad: CGFloat = 3
 
-    static func draw(segments: [BarSegment]) -> NSImage {
+    /// Diameter of the disruption dot. Small on purpose: the slot's colour
+    /// already means "how full", and a provider outage must not repaint it.
+    /// Above the slot there is no room either — the menu bar is 22 pt and the
+    /// pill 14 of them, so a badge on top gets clipped.
+    static let dotDiameter: CGFloat = 3.5
+
+    static func draw(segments: [BarSegment], disrupted: Set<String> = []) -> NSImage {
         let count = max(segments.count, 1)
         let width = pad * 2 + CGFloat(count) * segmentWidth + CGFloat(max(0, count - 1)) * gap
         let size = NSSize(width: width, height: height)
@@ -162,13 +191,25 @@ enum PillImage {
             capsule.fill()
 
             let slots = segments.isEmpty
-                ? [BarTone.idle]
-                : segments.map(\.tone)
-            for (index, tone) in slots.enumerated() {
+                ? [BarSegment(trackingID: "", provider: .claude, name: "", utilization: nil, tone: .idle)]
+                : segments
+            for (index, segment) in slots.enumerated() {
                 let x = pad + CGFloat(index) * (segmentWidth + gap)
                 let slot = NSRect(x: x, y: 3, width: segmentWidth, height: height - 6)
-                color(for: tone).setFill()
+                color(for: segment.tone).setFill()
                 NSBezierPath(roundedRect: slot, xRadius: 2, yRadius: 2).fill()
+
+                guard disrupted.contains(segment.trackingID) else { continue }
+                let dot = NSRect(
+                    x: slot.midX - dotDiameter / 2,
+                    y: slot.maxY - dotDiameter - 1,
+                    width: dotDiameter,
+                    height: dotDiameter
+                )
+                // Ink, not a new hue: the palette says "how full", and a
+                // disruption somewhere else is not a fuller meter.
+                NSColor.labelColor.setFill()
+                NSBezierPath(ovalIn: dot).fill()
             }
             return true
         }

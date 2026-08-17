@@ -57,7 +57,11 @@ enum GrpcWeb {
 
     private static func trailerStatus(_ payload: Data) -> Int? {
         guard let text = String(data: payload, encoding: .utf8) else { return nil }
-        for line in text.split(whereSeparator: { $0 == "\r" || $0 == "\n" }) {
+        // `isNewline`, not `$0 == "\r" || $0 == "\n"`: Swift reads CRLF as one
+        // Character that equals neither of those, and gRPC-Web trailers are CRLF.
+        // Splitting on the two apart left the whole trailer as one line, so
+        // `grpc-status` never matched and a failed call read as a good one.
+        for line in text.split(whereSeparator: \.isNewline) {
             let parts = line.split(separator: ":", maxSplits: 1)
             guard parts.count == 2, parts[0].lowercased() == "grpc-status" else { continue }
             return Int(parts[1].trimmingCharacters(in: .whitespaces))

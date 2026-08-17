@@ -8,6 +8,10 @@ Claude, ChatGPT, and Grok, all your accounts, one pill.
 
 [whatsmyusage.com](https://whatsmyusage.com) · [Download / build](#build-from-source)
 
+<p align="center">
+  <img src="docs/screenshot.png" width="420" alt="The menu-bar pill with one named slot per account, and the popover that opens from it">
+</p>
+
 Free. Open source. Native on macOS 14+. Cat included.
 
 ## Two accounts? No more logging out.
@@ -121,6 +125,15 @@ it, and on a case-insensitive volume `Contents/MacOS/whatsmyusage` is the
 same path as `WhatsMyUsage`. The script refuses to overwrite a destination
 that already exists under a different name.
 
+The app icon and the site's favicon are one drawing: `Scripts/make-icon.swift`
+renders `Resources/AppIcon.icns` and `site/favicon.png` from `site/cat-fabi.svg`
+— the hero cat — on the app's yellow square, with the stroke thickened at the
+middle sizes. At 64 px and below the whole cat runs into mush however thick the
+pen, so those sizes show only the cross on the cat's rear; the favicon is one of
+them, because a browser tab is 16 px. Both outputs are committed, so a
+build needs neither the script nor an SVG renderer. Run it when the drawing or
+the brand colours change.
+
 Without `USAGE_BAR_SIGN_IDENTITY` the bundle is ad-hoc signed. That identity
 is the binary hash, so Keychain treats every rebuild as a new app and prompts
 again. A named certificate stays put:
@@ -142,6 +155,44 @@ asks once more, then copies cookies from the previous names
 
 The version in the bundle is the latest `v<x.y.z>` git tag, and `CFBundleVersion`
 is the commit it was built from. See [AGENTS.md](AGENTS.md) → Versioning.
+
+Settings has a **Start at login** checkbox. It calls `SMAppService`, the same
+switch as System Settings › General › Login Items, and stores nothing of its
+own — the checkbox always shows what launchd has registered. Only the `.app`
+can register itself; running the bare `swift run` binary leaves it disabled.
+
+⌘R refreshes, ⌘, opens Settings, ⌘Q quits. The bar also refreshes every five
+minutes on its own.
+
+### Provider incidents
+
+A full meter is one reason nothing works; a provider outage is the other. The
+app reads the public status pages of Claude, OpenAI, xAI and GitHub and shows
+the answer where the question comes up:
+
+- a **banner on the account card** when that provider has an incident, plus a
+  small dot in its pill slot — ink, not a new colour, because the pill's scale
+  means "how full" and a foreign outage must not repaint it;
+- **one grey line** under the accounts when nothing is wrong: `No incidents ·
+  checked 14:52`. A standing "All Systems Operational" trains the eye to skip
+  the spot, and the real outage gets skipped with it — the time is the whole
+  content of that line;
+- **`Status unchecked`** when a page did not answer. Silence is never rendered
+  as health;
+- GitHub belongs to no account, so it speaks on that line instead of a card.
+
+Settings › *Status tracking* switches the whole thing off — no line, no banner,
+**and no requests** — or any single page, or the services within one. Defaults:
+Claude `claude.ai`, `Claude Code`, `Claude API`; xAI `Grok (Web)` and
+`Single Sign-On`; GitHub `Actions`, `API Requests`, `Pull Requests`, `Issues`.
+OpenAI has no default: its page lists two services called "Login" and its
+incidents name no service at all, so filtering by name would only pretend to
+filter. What each page really sends is in
+[`docs/RESEARCH_STATUS_PAGES.md`](docs/RESEARCH_STATUS_PAGES.md) — including
+why the badge at the top is never read.
+
+`whatsmyusage pick` ignores all of it. It answers "where is there quota left",
+not "what is broken".
 
 ### CLI
 

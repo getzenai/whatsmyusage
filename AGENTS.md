@@ -46,6 +46,15 @@ Read `README.md` and `docs/` before changing parsers or cookie handling.
   account-scoped worst. Claude `locked` stays `unknown` — do not invent it.
 - Do not hardcode limit names the provider invents. Claude's `limits[]` grows
   new `kind` values; unknown ones pass through.
+- Status pages: the badge is not the answer. Claude reported "All Systems
+  Operational" with an incident open. Read `components[]` and the incident
+  list; a component can be degraded with nothing declared. A page that timed
+  out, changed shape, or answered 503 is `unchecked`, never "no incidents" —
+  silence must not render as health. Unknown component words count as trouble,
+  and an incident that names no component counts for the whole source — so the
+  per-service ticks narrow degradations, never incidents. OpenAI's components
+  come from `components.json`: its `summary.json` truncates at 25 of 34 and
+  cuts off exactly the Codex services. See `docs/RESEARCH_STATUS_PAGES.md`.
 
 ## Layout
 
@@ -89,3 +98,12 @@ type(scope)!: subject         feat(log)!: rekey the series   (breaking)
 
 `swift test` must pass on the commit you claim it passes on. Run the full
 package suite, not a scoped test filter.
+
+CI (`.github/workflows/ci.yml`, Blacksmith macOS runners) repeats that and adds
+what a green suite does not cover: `swift build -c release -Xswiftc
+-warnings-as-errors` over every source target, and `Scripts/make-app-bundle.sh`.
+`swift test` never compiles `Sources/UsageBarApp`, so the app can be broken with
+285 tests passing. **A new compiler warning fails the build** — both parser bugs
+fixed in `fix(parsers)` were standing warnings. Tests are exempt: the
+swift-testing dependency is deprecated on Swift 6.3 and still required without
+Xcode.

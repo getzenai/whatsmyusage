@@ -16,6 +16,7 @@ CONFIGURATION="${1:-release}"
 BUNDLE_ID="com.whatsmyusage.app"
 APP_NAME="WhatsMyUsage"
 PRODUCT_NAME="UsageBar"
+ICON_NAME="AppIcon"
 cd "$(dirname "$0")/.."
 REPO_ROOT="$PWD"
 
@@ -88,6 +89,9 @@ mkdir -p "$APP_PATH/Contents/MacOS" "$APP_PATH/Contents/Resources"
 # app never launches it. Shipping it next to WhatsMyUsage is how a case-fold
 # collision replaced the menu-bar binary with --help.
 install_file "$BIN_PATH/$PRODUCT_NAME" "$APP_PATH/Contents/MacOS/$APP_NAME"
+# Committed, not built here: see Scripts/make-icon.swift. Without an icon the
+# app shows the blank sheet in Login Items and in every notification it posts.
+install_file "$REPO_ROOT/Resources/$ICON_NAME.icns" "$APP_PATH/Contents/Resources/$ICON_NAME.icns"
 
 cat > "$APP_PATH/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -98,6 +102,8 @@ cat > "$APP_PATH/Contents/Info.plist" <<PLIST
     <string>en</string>
     <key>CFBundleExecutable</key>
     <string>$APP_NAME</string>
+    <key>CFBundleIconFile</key>
+    <string>$ICON_NAME</string>
     <key>CFBundleIdentifier</key>
     <string>$BUNDLE_ID</string>
     <key>CFBundleInfoDictionaryVersion</key>
