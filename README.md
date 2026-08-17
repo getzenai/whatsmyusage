@@ -49,6 +49,13 @@ it, and on a case-insensitive volume `Contents/MacOS/whatsmyusage` is the
 same path as `WhatsMyUsage`. The script refuses to overwrite a destination
 that already exists under a different name.
 
+The app icon and the site's favicon are one drawing: `Scripts/make-icon.swift`
+renders `Resources/AppIcon.icns` and `site/favicon.png` from `site/cat-fabi.svg`
+— the hero cat — on the site's ginger square, with the stroke thickened at the
+small sizes so the silhouette survives 16 px. Both outputs are committed, so a
+build needs neither the script nor an SVG renderer. Run it when the drawing or
+the brand colours change.
+
 Without `USAGE_BAR_SIGN_IDENTITY` the bundle is ad-hoc signed. That identity
 is the binary hash, so Keychain treats every rebuild as a new app and prompts
 again. A named certificate stays put:
