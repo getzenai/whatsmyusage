@@ -68,7 +68,10 @@ final class SettingsController: NSObject, NSWindowDelegate {
         let window = NSWindow(contentViewController: hosting)
         window.title = AppIdentity.displayName
         window.styleMask = [.titled, .closable, .resizable]
-        window.setContentSize(NSSize(width: 640, height: 620))
+        // Tall enough that the status rows are on screen when it opens. They
+        // are the last thing in the window, and the last thing is the first
+        // thing nobody finds.
+        window.setContentSize(NSSize(width: 640, height: 700))
         window.delegate = self
         window.isReleasedWhenClosed = false
         window.center()
@@ -400,16 +403,22 @@ struct OnboardingRoot: View {
         VStack(spacing: 0) {
             stepHeader
             Divider().opacity(0.35)
-            Group {
-                switch model.step {
-                case .welcome: welcome
-                case .paste: paste
-                case .detected: detected
-                case .done: done
+            // The step scrolls. Everything below the accounts used to be cut
+            // off by the window edge with no way to reach it, and an option you
+            // cannot scroll to is an option that does not exist.
+            ScrollView {
+                Group {
+                    switch model.step {
+                    case .welcome: welcome
+                    case .paste: paste
+                    case .detected: detected
+                    case .done: done
+                    }
                 }
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+                .padding(24)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .padding(24)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             Divider().opacity(0.35)
             footer
         }
@@ -521,6 +530,10 @@ struct OnboardingRoot: View {
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
                 .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
+                // The accounts are the point of this window: they are the one
+                // flexible thing here, so without a floor everything below
+                // squeezes them out of it.
+                .frame(minHeight: 160)
             }
             pillPicker
             loginItemPicker
@@ -930,10 +943,13 @@ private struct CookieEditor: NSViewRepresentable {
 /// Status Tracking. One master switch, then one line per page, then the
 /// services that count. The master switch stops the requests too — a switch
 /// that only hides the answer while the app keeps polling would be a lie.
+///
+/// The four pages are always visible: hiding them behind a link traded "does
+/// not get in the way" for "cannot be found", and the second one lost. Only the
+/// services under a page fold away — those are a long list nobody edits twice.
 private struct StatusTrackingSection: View {
     let model: OnboardingModel
     let actions: OnboardingActions
-    @State private var showingSources = false
     @State private var expanded: Set<String> = []
 
     var body: some View {
@@ -953,30 +969,15 @@ private struct StatusTrackingSection: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             if model.statusPrefs.enabled {
-                // Collapsed by default: the accounts are what this window is
-                // for, and four pages of tick boxes would push them off it.
-                Button(showingSources ? "Hide pages" : "Pages: \(enabledSourceNames)") {
-                    showingSources.toggle()
-                }
-                .buttonStyle(.link)
-                .font(.system(size: 11))
-
-                if showingSources {
-                    VStack(alignment: .leading, spacing: 4) {
-                        ForEach(StatusSource.allCases, id: \.rawValue) { source in
-                            sourceRow(source)
-                        }
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(StatusSource.allCases, id: \.rawValue) { source in
+                        sourceRow(source)
                     }
-                    .padding(.leading, 18)
-                    .padding(.top, 2)
                 }
+                .padding(.leading, 18)
+                .padding(.top, 2)
             }
         }
-    }
-
-    private var enabledSourceNames: String {
-        let on = StatusSource.allCases.filter(model.statusPrefs.isEnabled)
-        return on.isEmpty ? "none" : on.map(\.displayName).joined(separator: ", ")
     }
 
     private func sourceRow(_ source: StatusSource) -> some View {
@@ -994,15 +995,22 @@ private struct StatusTrackingSection: View {
                 .toggleStyle(.checkbox)
 
                 if on, !components.isEmpty {
-                    Button(expanded.contains(source.rawValue) ? "Hide services" : serviceCount(watched, of: components)) {
-                        if expanded.contains(source.rawValue) {
-                            expanded.remove(source.rawValue)
-                        } else {
-                            expanded.insert(source.rawValue)
+                    let isOpen = expanded.contains(source.rawValue)
+                    Button {
+                        if isOpen { expanded.remove(source.rawValue) } else { expanded.insert(source.rawValue) }
+                    } label: {
+                        // The chevron is the affordance the link was missing:
+                        // it says "there is more under here" before the click.
+                        HStack(spacing: 3) {
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 9, weight: .semibold))
+                                .rotationEffect(.degrees(isOpen ? 90 : 0))
+                            Text(serviceCount(watched, of: components))
                         }
+                        .font(.system(size: 11))
                     }
                     .buttonStyle(.link)
-                    .font(.system(size: 11))
+                    .accessibilityLabel("\(isOpen ? "Hide" : "Show") \(source.displayName) services")
                 }
                 Spacer(minLength: 0)
             }
@@ -1015,21 +1023,22 @@ private struct StatusTrackingSection: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.leading, 18)
                 }
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 2) {
-                        ForEach(components) { component in
-                            Toggle(isOn: Binding(
-                                get: { watched?.contains(component.id) ?? true },
-                                set: { _ in actions.toggleStatusComponent(source, component.id) }
-                            )) {
-                                Text(component.name).font(.system(size: 11))
-                            }
-                            .toggleStyle(.checkbox)
+                // Plain rows, no scroller of their own. A `ScrollView` asks for
+                // no height at all, so under a `maxHeight` it settled at zero
+                // and the list rendered as an empty gap — it did, before this.
+                // The window scrolls instead; one scroller, not three.
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(components) { component in
+                        Toggle(isOn: Binding(
+                            get: { watched?.contains(component.id) ?? true },
+                            set: { _ in actions.toggleStatusComponent(source, component.id) }
+                        )) {
+                            Text(component.name).font(.system(size: 11))
                         }
+                        .toggleStyle(.checkbox)
                     }
-                    .padding(.vertical, 4)
                 }
-                .frame(maxHeight: 110)
+                .padding(.vertical, 4)
                 .padding(.leading, 18)
             }
         }
@@ -1039,7 +1048,7 @@ private struct StatusTrackingSection: View {
     private func note(for source: StatusSource) -> String? {
         switch source {
         case .openAI:
-            "OpenAI never says which service an incident affects, so any OpenAI incident counts."
+            "These ticks cover services OpenAI reports as degraded. A declared OpenAI incident names no service at all, so it counts whatever you tick here."
         case .github:
             "Not tied to an account — GitHub incidents show on the line under the accounts."
         case .claude, .xAI:

@@ -51,8 +51,10 @@ Read `README.md` and `docs/` before changing parsers or cookie handling.
   list; a component can be degraded with nothing declared. A page that timed
   out, changed shape, or answered 503 is `unchecked`, never "no incidents" —
   silence must not render as health. Unknown component words count as trouble,
-  and an incident that names no component counts for the whole source. See
-  `docs/RESEARCH_STATUS_PAGES.md`.
+  and an incident that names no component counts for the whole source — so the
+  per-service ticks narrow degradations, never incidents. OpenAI's components
+  come from `components.json`: its `summary.json` truncates at 25 of 34 and
+  cuts off exactly the Codex services. See `docs/RESEARCH_STATUS_PAGES.md`.
 
 ## Layout
 

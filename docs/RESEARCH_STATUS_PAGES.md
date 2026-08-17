@@ -52,9 +52,20 @@ but:
   25 records) filtered on `status`.
 - Those records carry **no `components[]` and no `started_at`** — only
   `created_at`. An OpenAI incident cannot be attributed to a service.
-- The page lists 25 components in `summary.json`, 34 in `components.json`, and
-  **two of them are both named "Login"**. There is nothing to narrow by name,
-  which is why OpenAI ships without a default component filter.
+- **`summary.json` stops at 25 components; the page has 34.** It returns
+  positions 0–24 and nothing after, and "Codex API", "CLI" and "VS Code
+  extension" all sit past the cut. That is why OpenAI's components are read
+  from `components.json`, which has the same shape and the whole list.
+  Claude (6) and GitHub (12) are nowhere near the cap and stay on `summary.json`,
+  which is also where their incidents come from.
+- **Two components are both named "Login"** (ids `01JSM5RTJW…` and
+  `01JMXBNJXG…`). Defaults match by name, so both are watched. That is the
+  direction that cannot hide an outage.
+- The default narrows to the coding surfaces — Codex Web, Codex API, Codex in
+  ChatGPT Desktop, CLI, VS Code extension, Responses, Conversations, Login —
+  because the rest of the page is Sora, Ads Manager and FedRAMP. It narrows the
+  **degraded-component** reading only: an incident names no component, so it
+  still counts for the whole source no matter what is ticked.
 
 ## xAI — no API, but a real feed
 

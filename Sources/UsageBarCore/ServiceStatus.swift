@@ -200,11 +200,26 @@ public enum StatusDefaults {
         .claude: ["claude.ai", "Claude Code", "Claude API (api.anthropic.com)"],
         .github: ["Actions", "API Requests", "Pull Requests", "Issues"],
         .xAI: [XAIServices.grokWeb, XAIServices.singleSignOn],
+        // OpenAI's page lists 34 services, most of them things we never touch —
+        // Sora, Ads Manager, FedRAMP. These are the ones a coding session runs
+        // through, plus the sign-in without which none of them work. Two
+        // components are both named "Login" and matching by name watches both,
+        // which is the loud direction.
+        .openAI: [
+            "Codex Web",
+            "Codex API",
+            "Codex in ChatGPT Desktop",
+            "CLI",
+            "VS Code extension",
+            "Responses",
+            "Conversations",
+            "Login",
+        ],
     ]
 
-    /// OpenAI is absent on purpose: its page lists 25 services, two of them
-    /// called "Login", and its incidents never name a component. Narrowing that
-    /// by name would only pretend to filter.
+    /// Every source narrows by default. This stays as the one place that says
+    /// whether a source has one, so the Settings note can be honest about a
+    /// source that does not.
     public static func hasDefault(_ source: StatusSource) -> Bool {
         componentNames[source] != nil
     }
