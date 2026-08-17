@@ -35,10 +35,12 @@ final class SettingsController: NSObject, NSWindowDelegate {
     private var model = OnboardingModel()
     var onSaved: (() -> Void)?
     var onPreferencesChanged: (() -> Void)?
+    var onStatusPreferencesChanged: (() -> Void)?
 
     func show(startingAt step: OnboardingStep? = nil) {
         NSApp.setActivationPolicy(.regular)
         model.prefs = DisplayStore.load()
+        model.statusPrefs = StatusStore.load()
         model.refreshLoginItem()
         if let step {
             model.step = step
@@ -74,6 +76,18 @@ final class SettingsController: NSObject, NSWindowDelegate {
         NSApp.activate(ignoringOtherApps: true)
         self.hosting = hosting
         self.window = window
+    }
+
+    /// Settings lists the services a page really has today, not a copy of them
+    /// kept here. A source that could not be read keeps whatever it last
+    /// listed, so the ticks do not vanish while the page is down.
+    func didReadStatus(_ reads: [StatusRead]) {
+        for read in reads {
+            guard case .report(let report) = read, !report.components.isEmpty else { continue }
+            model.statusComponents[report.source] = report.components
+        }
+        model.statusPrefs = StatusStore.load()
+        if model.step == .detected { syncRoot() }
     }
 
     func didRefresh(byProvider: [Provider: [UsageOutcome]]) {
@@ -153,6 +167,17 @@ final class SettingsController: NSObject, NSWindowDelegate {
             setStartAtLogin: { [weak self] enabled in
                 self?.setStartAtLogin(enabled)
             },
+            setStatusTracking: { [weak self] enabled in
+                self?.mutateStatusPrefs { $0.enabled = enabled }
+            },
+            setStatusSource: { [weak self] source, enabled in
+                self?.mutateStatusPrefs { $0.setEnabled(enabled, for: source) }
+            },
+            toggleStatusComponent: { [weak self] source, id in
+                guard let self else { return }
+                let components = self.model.components(for: source)
+                self.mutateStatusPrefs { $0.toggleComponent(id, for: source, among: components) }
+            },
             openLoginItemSettings: { LoginItem.openSystemSettings() }
         )
     }
@@ -168,6 +193,13 @@ final class SettingsController: NSObject, NSWindowDelegate {
             model.loginItemNote = "macOS refused: \(error.localizedDescription)"
         }
         syncRoot()
+    }
+
+    private func mutateStatusPrefs(_ body: (inout StatusPreferences) -> Void) {
+        body(&model.statusPrefs)
+        StatusStore.save(model.statusPrefs)
+        syncRoot()
+        onStatusPreferencesChanged?()
     }
 
     private func mutatePrefs(_ body: (inout DisplayPreferences) -> Void) {
@@ -301,6 +333,14 @@ final class OnboardingModel {
     /// Read from launchd, never stored. `refreshLoginItem` is the only writer.
     var startsAtLogin = false
     var loginItemNote: String?
+    var statusPrefs = StatusPreferences()
+    /// What each page listed the last time it answered. xAI publishes no
+    /// service list — its slugs are the static table in `XAIServices`.
+    var statusComponents: [StatusSource: [StatusComponent]] = [.xAI: XAIServices.components]
+
+    func components(for source: StatusSource) -> [StatusComponent] {
+        statusComponents[source] ?? []
+    }
 
     func refreshLoginItem() {
         startsAtLogin = LoginItem.isEnabled
@@ -346,6 +386,9 @@ struct OnboardingActions {
     var welcomeContinued: () -> Void
     var setPill: (PillStyle) -> Void
     var setStartAtLogin: (Bool) -> Void
+    var setStatusTracking: (Bool) -> Void
+    var setStatusSource: (StatusSource, Bool) -> Void
+    var toggleStatusComponent: (StatusSource, String) -> Void
     var openLoginItemSettings: () -> Void
 }
 
@@ -481,6 +524,7 @@ struct OnboardingRoot: View {
             }
             pillPicker
             loginItemPicker
+            StatusTrackingSection(model: model, actions: actions)
             Spacer(minLength: 0)
         }
         .alert("Remove this login?", isPresented: $model.showingDeleteConfirm) {
@@ -880,5 +924,131 @@ private struct CookieEditor: NSViewRepresentable {
             guard let view = notification.object as? NSTextView else { return }
             text.wrappedValue = view.string
         }
+    }
+}
+
+/// Status Tracking. One master switch, then one line per page, then the
+/// services that count. The master switch stops the requests too — a switch
+/// that only hides the answer while the app keeps polling would be a lie.
+private struct StatusTrackingSection: View {
+    let model: OnboardingModel
+    let actions: OnboardingActions
+    @State private var showingSources = false
+    @State private var expanded: Set<String> = []
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Toggle(isOn: Binding(
+                get: { model.statusPrefs.enabled },
+                set: { actions.setStatusTracking($0) }
+            )) {
+                Text("Status tracking — show provider incidents")
+                    .font(.system(size: 13))
+            }
+            .toggleStyle(.checkbox)
+
+            Text("Reads the public status pages so you can tell a provider outage from a full meter. Off means no line, no banner — and no requests.")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if model.statusPrefs.enabled {
+                // Collapsed by default: the accounts are what this window is
+                // for, and four pages of tick boxes would push them off it.
+                Button(showingSources ? "Hide pages" : "Pages: \(enabledSourceNames)") {
+                    showingSources.toggle()
+                }
+                .buttonStyle(.link)
+                .font(.system(size: 11))
+
+                if showingSources {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(StatusSource.allCases, id: \.rawValue) { source in
+                            sourceRow(source)
+                        }
+                    }
+                    .padding(.leading, 18)
+                    .padding(.top, 2)
+                }
+            }
+        }
+    }
+
+    private var enabledSourceNames: String {
+        let on = StatusSource.allCases.filter(model.statusPrefs.isEnabled)
+        return on.isEmpty ? "none" : on.map(\.displayName).joined(separator: ", ")
+    }
+
+    private func sourceRow(_ source: StatusSource) -> some View {
+        let components = model.components(for: source)
+        let watched = model.statusPrefs.watched(source, among: components)
+        let on = model.statusPrefs.isEnabled(source)
+        return VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 8) {
+                Toggle(isOn: Binding(
+                    get: { on },
+                    set: { actions.setStatusSource(source, $0) }
+                )) {
+                    Text(source.displayName).font(.system(size: 12))
+                }
+                .toggleStyle(.checkbox)
+
+                if on, !components.isEmpty {
+                    Button(expanded.contains(source.rawValue) ? "Hide services" : serviceCount(watched, of: components)) {
+                        if expanded.contains(source.rawValue) {
+                            expanded.remove(source.rawValue)
+                        } else {
+                            expanded.insert(source.rawValue)
+                        }
+                    }
+                    .buttonStyle(.link)
+                    .font(.system(size: 11))
+                }
+                Spacer(minLength: 0)
+            }
+
+            if on, expanded.contains(source.rawValue) {
+                if let note = note(for: source) {
+                    Text(note)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.leading, 18)
+                }
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 2) {
+                        ForEach(components) { component in
+                            Toggle(isOn: Binding(
+                                get: { watched?.contains(component.id) ?? true },
+                                set: { _ in actions.toggleStatusComponent(source, component.id) }
+                            )) {
+                                Text(component.name).font(.system(size: 11))
+                            }
+                            .toggleStyle(.checkbox)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+                .frame(maxHeight: 110)
+                .padding(.leading, 18)
+            }
+        }
+    }
+
+    /// Only where the page itself behaves in a way the ticks cannot fix.
+    private func note(for source: StatusSource) -> String? {
+        switch source {
+        case .openAI:
+            "OpenAI never says which service an incident affects, so any OpenAI incident counts."
+        case .github:
+            "Not tied to an account — GitHub incidents show on the line under the accounts."
+        case .claude, .xAI:
+            nil
+        }
+    }
+
+    private func serviceCount(_ watched: Set<String>?, of components: [StatusComponent]) -> String {
+        let count = watched?.count ?? components.count
+        return "\(count) of \(components.count) services"
     }
 }
