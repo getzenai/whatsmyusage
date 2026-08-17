@@ -12,10 +12,9 @@ Free. Open source. Native on macOS 14+. Cat included.
 
 ## Two accounts? No more logging out.
 
-Checking a second account normally means signing out and back in. Here, every
-account gets its own slot in the pill — with its own name. "Work", "Personal",
-"The Max plan I don't talk about." No signing out, no switching, no guessing
-which slot is which.
+Every account gets its own slot in the pill — with its own name. "Work",
+"Personal", "The Max plan I don't talk about." No signing out, no switching,
+no guessing which slot is which.
 
 **See which account has room.** Green means go. Glance at the colors, pick the
 account with room, and send the big job there.
@@ -46,78 +45,19 @@ Nothing to set up. The app just notices — quietly, like the cat.
 
 ## Using it
 
-The app is a menu bar accessory (no Dock icon). UI is English. Add each
-account once. Then glance up.
+The app is a menu bar accessory. Add each account once.
 
-The pill has one coloured slot per account. Colour is the worst *account-wide*
-limit of that subscription:
-
-| Colour | Meaning |
-|---|---|
-| green | under 70 % |
-| yellow | 70 – 89 % |
-| orange | 90 – 99 % — nearly out, but still usable |
-| red | locked, or the meter reads 100 % — nothing left to spend |
-
-Red is reserved for the wall. At 95 % you can keep working and at 100 % you
-cannot, and that is the one difference the bar exists to show. A full model
-limit (for example one Claude model) does not paint the slot — it stays in the
-popover. Click the pill for progress bars, remaining time until reset, and
-rename.
-
-Settings can hide individual limits, hide an account, and reorder cards. That
-order is the popover and the pill. Settings can also shrink the pill to a
-**single slot for all accounts**. Its colour comes from the mean utilisation of
-each account's shortest window, on the same scale.
-
-| Key | Action |
-|---|---|
-| ⌘R | Refresh |
-| ⌘, | Settings |
-| ⌘Q | Quit |
-
-It also refreshes every five minutes on its own.
+The pill has one slot per account: green has room, red is closed. Click it
+for details and reset times.
 
 ## Build from source
 
 ```
-swift test
+git clone https://github.com/getzenai/whatsmyusage.git
+cd whatsmyusage
 Scripts/make-app-bundle.sh        # → .build/WhatsMyUsage.app
 open ".build/WhatsMyUsage.app"
 ```
-
-`Scripts/make-app-bundle.sh` also builds the `whatsmyusage` CLI and copies
-it to `~/.local/bin/whatsmyusage`, so agents can run `whatsmyusage status --json`
-without a path. The CLI does not go into the `.app` — the app never launches
-it, and on a case-insensitive volume `Contents/MacOS/whatsmyusage` is the
-same path as `WhatsMyUsage`. The script refuses to overwrite a destination
-that already exists under a different name.
-
-Without `USAGE_BAR_SIGN_IDENTITY` the bundle is ad-hoc signed. That identity
-is the binary hash, so Keychain treats every rebuild as a new app and prompts
-again. A named certificate stays put:
-
-```
-USAGE_BAR_SIGN_IDENTITY="WhatsMyUsage Local" Scripts/make-app-bundle.sh
-```
-
-Make one in two minutes: Keychain Access → Certificate Assistant → Create a
-Certificate… → name it (this is the identity string), Identity Type **Self
-Signed Root**, Certificate Type **Code Signing**. The first open still needs
-right-click → Open (self-signed, Gatekeeper). After that the Keychain asks
-once, then stays quiet across rebuilds.
-
-The version in the bundle is the latest `v<x.y.z>` git tag, and `CFBundleVersion`
-is the commit it was built from. Releases are cut from the PR titles: every PR is
-squashed, the title has to be a [Conventional Commit](https://www.conventionalcommits.org),
-and a push to `main` tags and releases whatever those titles add up to. See
-[AGENTS.md](AGENTS.md) → Versioning, and `Scripts/semver.py check-title "feat: …"`
-to check one before opening the PR.
-
-The bundle id is `com.whatsmyusage.app`. The Keychain item — the name macOS
-shows in the access prompt — is `whatsmyusage.com`. A rebuild after a rename
-asks once more, then copies cookies from the previous names
-(`com.whatsmyusage.app`, `de.getzenai.ai-usage-bar`).
 
 ---
 
@@ -127,6 +67,9 @@ Existing bars only show Claude's 5-hour window. Measured 2026-08-15:
 5h window **0 %**, weekly limit **100 %** — the bar would have read "0 %" while the
 account was locked out. The app has to look at every limit and show the **worst**
 one.
+
+Slot colour is green under 70 %, yellow 70–89 %, orange 90–99 %, and red only
+when locked or the meter reads 100 %. A full model limit stays in the popover.
 
 ### Providers
 
@@ -168,6 +111,37 @@ any lock made the one slot red almost always. The 100 % is already in the mean.
 Everything shut therefore still reads red, and one open account among four full
 ones lands in the warning band. Claude never sends a lock state, so a full
 meter counts as blocked on its own.
+
+### Building
+
+`Scripts/make-app-bundle.sh` also builds the `whatsmyusage` CLI and copies
+it to `~/.local/bin/whatsmyusage`, so agents can run `whatsmyusage status --json`
+without a path. The CLI does not go into the `.app` — the app never launches
+it, and on a case-insensitive volume `Contents/MacOS/whatsmyusage` is the
+same path as `WhatsMyUsage`. The script refuses to overwrite a destination
+that already exists under a different name.
+
+Without `USAGE_BAR_SIGN_IDENTITY` the bundle is ad-hoc signed. That identity
+is the binary hash, so Keychain treats every rebuild as a new app and prompts
+again. A named certificate stays put:
+
+```
+USAGE_BAR_SIGN_IDENTITY="WhatsMyUsage Local" Scripts/make-app-bundle.sh
+```
+
+Make one in two minutes: Keychain Access → Certificate Assistant → Create a
+Certificate… → name it (this is the identity string), Identity Type **Self
+Signed Root**, Certificate Type **Code Signing**. The first open still needs
+right-click → Open (self-signed, Gatekeeper). After that the Keychain asks
+once, then stays quiet across rebuilds.
+
+The bundle id is `com.whatsmyusage.app`. The Keychain item — the name macOS
+shows in the access prompt — is `whatsmyusage.com`. A rebuild after a rename
+asks once more, then copies cookies from the previous names
+(`com.whatsmyusage.app`, `de.getzenai.ai-usage-bar`).
+
+The version in the bundle is the latest `v<x.y.z>` git tag, and `CFBundleVersion`
+is the commit it was built from. See [AGENTS.md](AGENTS.md) → Versioning.
 
 ### CLI
 
@@ -225,8 +199,9 @@ Static landing page in [`site/`](site/). Push to `main` deploys it to
 
 Pull requests are welcome. Open an issue first for a larger change. Every PR is
 squashed; title it as a Conventional Commit so the release job can read it.
-`swift test` must pass on the commit you claim it passes on. See
-[AGENTS.md](AGENTS.md) for the rest of the rules.
+`swift test` must pass on the commit you claim it passes on. Check a title with
+`Scripts/semver.py check-title "feat: …"`. See [AGENTS.md](AGENTS.md) for the
+rest of the rules.
 
 ## License
 
