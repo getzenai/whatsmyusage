@@ -231,6 +231,7 @@ code {
 .wishes p,
 .proof p,
 .get > p,
+.flavor-copy > p,
 .steps span {
   overflow-wrap: break-word;
 }
@@ -623,11 +624,17 @@ code {
 }
 
 .flavor {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 1.6rem;
-  align-items: start;
-  padding: 0 clamp(1.25rem, 5vw, 5rem) clamp(3.5rem, 8vw, 6rem);
+  padding: clamp(3rem, 7vw, 5.5rem) clamp(1.25rem, 5vw, 5rem);
+  background: var(--ink);
+  color: var(--bg);
+}
+
+.flavor-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 1.8rem;
+  max-width: 40rem;
+  margin-inline: auto;
 }
 
 .flavor-copy {
@@ -642,15 +649,31 @@ code {
   line-height: 1.12;
 }
 
-.flavor p {
+.flavor-copy > p {
   margin: 0;
-  color: var(--muted);
+  color: oklch(0.82 0.015 55);
   font-size: clamp(1.05rem, 2vw, 1.25rem);
 }
 
+.flavor-kinds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.15rem;
+  max-width: 22rem;
+  margin: 1.35rem 0 0;
+  padding: 0;
+  list-style: none;
+  color: oklch(0.78 0.015 55);
+  font-size: 0.95rem;
+  font-weight: 550;
+}
+
 .flavor .achievements {
-  width: min(22.5rem, 100%);
+  width: min(23.75rem, 100%);
   margin-inline: auto;
+  box-shadow:
+    0 0 0 1px oklch(0 0 0 / 0.45),
+    0 28px 64px oklch(0 0 0 / 0.42);
 }
 
 .horizon h2 {
@@ -763,7 +786,7 @@ code {
 /* ——— Get ——— */
 
 .get {
-  padding: 0 clamp(1.25rem, 5vw, 5rem) clamp(3.5rem, 8vw, 6rem);
+  padding: clamp(3.5rem, 8vw, 6rem) clamp(1.25rem, 5vw, 5rem);
 }
 
 .get-cat {
@@ -913,10 +936,20 @@ code {
     justify-self: center;
   }
 
-  .flavor {
-    grid-template-columns: minmax(0, 1fr) minmax(16rem, 22.5rem);
-    gap: 2.4rem 3rem;
+  .flavor-inner {
+    display: grid;
+    grid-template-columns: minmax(16rem, 22rem) minmax(18rem, 23.75rem);
+    gap: 2.4rem 2.8rem;
     align-items: start;
+    max-width: 52rem;
+    margin-inline: auto;
+  }
+
+  .flavor-kinds {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.38rem;
+    max-width: none;
   }
 }
 
