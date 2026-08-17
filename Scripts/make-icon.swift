@@ -1,14 +1,14 @@
 #!/usr/bin/env swift
 // Renders Resources/AppIcon.icns and site/favicon.png from site/cat-fabi.svg —
-// the same cat the landing page uses — on the site's ginger square.
+// the same cat the landing page uses — on the app's yellow square.
 //
 // Usage: Scripts/make-icon.swift
 //
 // Both outputs are committed, so a normal build needs neither this script nor a
 // working SVG renderer. Run it only when the drawing or the colours change.
 // No dependencies: AppKit has read SVG since Ventura, iconutil ships with the
-// CLT. The colours below are the site's OKLCH tokens converted here rather
-// than hardcoded as hex, so styles.css stays the single source of the brand.
+// CLT. The colours below are written as OKLCH rather than as hex, in the same
+// notation styles.css uses, so a change to the brand ramp transfers by reading.
 
 import AppKit
 import Foundation
@@ -43,8 +43,14 @@ func oklch(_ lightness: Double, _ chroma: Double, _ hueDegrees: Double) -> NSCol
     return NSColor(srgbRed: encoded[0], green: encoded[1], blue: encoded[2], alpha: 1)
 }
 
-let ginger = oklch(0.72, 0.15, 55)          // --ginger
-let gingerDeep = oklch(0.62, 0.16, 45)      // shading, one step down the ramp
+// The plate is the app's own yellow: NSColor.systemYellow, the colour the pill
+// shows between 70 and 89 %, measured under Aqua as #FFCC00. The site's ginger
+// sits at hue 55 and reads as Claude's orange (#D97757, hue 39) at icon size —
+// too close for an icon that has to be told apart from Claude's in the Dock.
+// Written as OKLCH rather than as systemYellow itself so the render does not
+// change with the system appearance.
+let yellow = oklch(0.865, 0.177, 90)        // = systemYellow, #FFCC00
+let yellowDeep = oklch(0.78, 0.165, 82)     // shading, one step down the ramp
 let ink = oklch(0.20, 0.05, 45)             // between --ink and --ginger-ink
 
 guard let drawing = try? String(contentsOf: source, encoding: .utf8),
@@ -95,7 +101,7 @@ func render(size: Int) -> NSBitmapImageRep {
     let plate = NSRect(x: 100 * scale, y: 100 * scale, width: 824 * scale, height: 824 * scale)
     let squircle = NSBezierPath(roundedRect: plate, xRadius: 185.4 * scale, yRadius: 185.4 * scale)
     squircle.addClip()
-    NSGradient(starting: ginger, ending: gingerDeep)?.draw(in: plate, angle: -90)
+    NSGradient(starting: yellow, ending: yellowDeep)?.draw(in: plate, angle: -90)
 
     // The cat is a black line drawing. Draw it into the alpha channel, then
     // flood it with ink through `sourceIn` — that recolours the strokes
