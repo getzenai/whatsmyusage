@@ -77,7 +77,7 @@ struct ChatGPTParserTests {
 
     @Test func resetCreditsZeroIsNoneNotDisplayed() {
         let body = Data(#"{"available_count":0,"credits":[],"immediate_reset_purchase_eligible":false,"total_earned_count":0}"#.utf8)
-        #expect(UsageParser.parseChatGPTResetCredits(body: body) == .none)
+        #expect(UsageParser.parseChatGPTResetCredits(body: body) == ResetRead.none)
         #expect(ResetRead.label(for: 0) == nil)
     }
 

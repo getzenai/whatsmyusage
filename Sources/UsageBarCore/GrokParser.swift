@@ -85,7 +85,10 @@ enum GrokParser {
             guard let end = timestamp(token, 30), end > now else { continue }
             count += 1
         }
-        return count >= 1 ? .available(count) : .none
+        // `ResetRead.none`, spelled out: a bare `.none` in a `ResetRead?` context
+        // resolves to `Optional.none` — nil — and nil means "we did not read this",
+        // which keeps the stale count on screen. Zero vouchers is a reading.
+        return count >= 1 ? .available(count) : ResetRead.none
     }
 
     private static func timestamp(_ fields: [Proto.Field], _ number: UInt64) -> Date? {
