@@ -1,0 +1,73 @@
+name: CI
+
+# What every PR has to survive: the tests pass, everything compiles without a
+# warning, and the .app still assembles. Three separate questions — `swift test`
+# never compiles the app target, so a green suite says nothing about the menu bar.
+#
+# Runners are Blacksmith's macOS images, like the other repos here. macOS is not
+# a preference: AppKit and `.macOS(.v14)` mean this package does not build on Linux.
+#
+# Warnings are errors on purpose — for `Sources/`. The two bugs in the parsers
+# that this repo shipped were both standing compiler warnings nobody read.
+#
+# Not for `Tests/`: Swift 6.3 deprecates the swift-testing package (Testing now
+# ships in the toolchain), but dropping the dependency breaks `swift test` on a
+# machine with only the Command Line Tools — measured, `_TestingInternals` goes
+# missing. So the test target carries a deprecation warning per @Test until the
+# floor moves, and `-warnings-as-errors` stays on the build, which compiles
+# every source target and no test.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A new push replaces the run in flight. The old answer is about old code.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Tests
+    runs-on: blacksmith-6vcpu-macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: swift --version
+
+      # The full package suite. AGENTS.md forbids a scoped filter: a filter
+      # passes by not asking.
+      - name: swift test
+        run: swift test
+
+  build:
+    name: Build and bundle
+    runs-on: blacksmith-6vcpu-macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The version comes from the latest tag and nowhere else, so the app
+          # bundle needs the whole history to know what it is.
+          fetch-depth: 0
+
+      # Release, and every product: the app and the CLI only get compiled here.
+      - name: swift build
+        run: swift build -c release -Xswiftc -warnings-as-errors
+
+      # Ad-hoc signed (no USAGE_BAR_SIGN_IDENTITY on CI). This is here for the
+      # script itself — the Info.plist, the icon, the case-fold guards — not to
+      # produce something installable.
+      - name: Assemble WhatsMyUsage.app
+        run: Scripts/make-app-bundle.sh release
+
+      - name: Show what came out
+        run: |
+          set -euo pipefail
+          /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" -c "Print :CFBundleVersion" \
+            .build/WhatsMyUsage.app/Contents/Info.plist
+          codesign --verify --verbose=2 .build/WhatsMyUsage.app
