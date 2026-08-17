@@ -1,5 +1,14 @@
 name: Deploy site to Cloudflare Pages
 
+# The only job in this repo that sees a secret, so it is the only one worth
+# attacking. It runs on `push: main` and never on a pull request, which is what
+# keeps a contributor's code away from the Cloudflare token.
+#
+# Every action here — and in every other workflow — is pinned to a commit SHA
+# with the version in a trailing comment. A tag like `@v3` is a moving pointer
+# the action's owner can repoint; that is how tj-actions/changed-files leaked
+# other people's secrets in March 2025. Bump these deliberately, never silently.
+
 on:
   push:
     branches: [main]
@@ -14,9 +23,9 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: Deploy to Cloudflare Pages
-        uses: cloudflare/wrangler-action@v3
+        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3.9.0
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
