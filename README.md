@@ -1,40 +1,84 @@
 # WhatsMyUsage
 
-macOS menu bar app at [whatsmyusage.com](https://whatsmyusage.com): the usage that
-**actually binds you** across every AI subscription, at a glance — Claude, ChatGPT, Grok.
+**Every AI limit. One glance.**
 
-## Why
+Checking your usage means opening the app, finding the right page, clicking
+through — for every provider, every time. Now it lives in your menu bar:
+Claude, ChatGPT, and Grok, all your accounts, one pill.
 
-Existing bars only show Claude's 5-hour window. Measured 2026-08-15:
-5h window **0 %**, weekly limit **100 %** — the bar would have read "0 %" while the
-account was locked out. The app has to look at every limit and show the **worst** one.
+[whatsmyusage.com](https://whatsmyusage.com) · [Download / build](#build-from-source)
 
-## Status
+Free. Open source. Native on macOS 14+. Cat included.
 
-| Provider | Endpoint | Status |
-|---|---|---|
-| Claude | `/api/bootstrap`, `/api/organizations/{id}/usage` | measured live, see [docs/RESEARCH_CLAUDE_ENDPOINT.md](docs/RESEARCH_CLAUDE_ENDPOINT.md) |
-| ChatGPT | `/api/auth/session` → Bearer → `GET /backend-api/wham/usage` + `rate-limit-reset-credits` (display only) | measured live, see [docs/RESEARCH_CHATGPT_GROK_ENDPOINTS.md](docs/RESEARCH_CHATGPT_GROK_ENDPOINTS.md) |
-| Grok | `POST /rest/rate-limits` (2 h, per model) + `GetGrokCreditsConfig` (weekly, grpc-web) + `GetRemainingResets` (vouchers, display only) | measured live, see [docs/RESEARCH_GROK_WEEKLY_LIMIT.md](docs/RESEARCH_GROK_WEEKLY_LIMIT.md) |
+## Two accounts? No more logging out.
 
-## Handling cookies — binding
+Checking a second account normally means signing out and back in. Here, every
+account gets its own slot in the pill — with its own name. "Work", "Personal",
+"The Max plan I don't talk about." No signing out, no switching, no guessing
+which slot is which.
 
-Session cookies (`sessionKey`, `__Secure-next-auth.session-token.*`, `sso`) are full
-logins. They **never** belong in a chat, issue, commit, log, or test fixture.
+**See which account has room.** Green means go. Glance at the colors, pick the
+account with room, and send the big job there.
 
-- Entry happens locally in the app, straight from the browser into the paste field.
-- Storage in the macOS Keychain, never in a file in the repo.
-- Test fixtures: real response structure, values replaced by placeholders.
+**Know when you are back.** Blocked is temporary. Every limit shows when it
+resets — and when a slot turns from red to green, that account is back in the
+game.
 
-**This repo is meant to become public.** The same rule therefore covers everything
-account-related: no org UUIDs, email addresses, org names, or real usage numbers — what gets
-documented is the *shape* of a response, never an account.
+**Show only what you check.** Hide the limits you never worry about — the
+weekly one that never runs out, the provider you barely use. The pill stays
+down to the numbers you actually look at.
 
-On ChatGPT the session token is split across several numbered cookies
-(`…session-token.0`, `…session-token.1`) — extraction has to reassemble the parts sorted by
-index, otherwise the token is silently invalid.
+Everything runs on your Mac. The app talks directly to Anthropic, OpenAI, and
+xAI — there is no WhatsMyUsage server, and nothing is sent anywhere else. Open
+source, so you can check.
 
-## Building
+## You were going to max out anyway.
+
+Now it counts. 42 achievements for the way you already work: your first full
+limit, a night shift, a lost weekend, all three providers blocked at once.
+Nothing to set up. The app just notices — quietly, like the cat.
+
+- **Grand slam** — All three providers blocked at once.
+- **Night shift** — Limit burned between 1 and 5 in the morning.
+- **Lost weekend** — Full for forty-eight hours straight.
+- **Clean month** — Thirty days without hitting a single limit.
+- **The answer** — Earn every other one.
+
+## Using it
+
+The app is a menu bar accessory (no Dock icon). UI is English. Add each
+account once. Then glance up.
+
+The pill has one coloured slot per account. Colour is the worst *account-wide*
+limit of that subscription:
+
+| Colour | Meaning |
+|---|---|
+| green | under 70 % |
+| yellow | 70 – 89 % |
+| orange | 90 – 99 % — nearly out, but still usable |
+| red | locked, or the meter reads 100 % — nothing left to spend |
+
+Red is reserved for the wall. At 95 % you can keep working and at 100 % you
+cannot, and that is the one difference the bar exists to show. A full model
+limit (for example one Claude model) does not paint the slot — it stays in the
+popover. Click the pill for progress bars, remaining time until reset, and
+rename.
+
+Settings can hide individual limits, hide an account, and reorder cards. That
+order is the popover and the pill. Settings can also shrink the pill to a
+**single slot for all accounts**. Its colour comes from the mean utilisation of
+each account's shortest window, on the same scale.
+
+| Key | Action |
+|---|---|
+| ⌘R | Refresh |
+| ⌘, | Settings |
+| ⌘Q | Quit |
+
+It also refreshes every five minutes on its own.
+
+## Build from source
 
 ```
 swift test
@@ -67,63 +111,65 @@ The version in the bundle is the latest `v<x.y.z>` git tag, and `CFBundleVersion
 is the commit it was built from. Releases are cut from the PR titles: every PR is
 squashed, the title has to be a [Conventional Commit](https://www.conventionalcommits.org),
 and a push to `main` tags and releases whatever those titles add up to. See
-AGENTS.md → Versioning, and `Scripts/semver.py check-title "feat: …"` to check
-one before opening the PR.
+[AGENTS.md](AGENTS.md) → Versioning, and `Scripts/semver.py check-title "feat: …"`
+to check one before opening the PR.
 
 The bundle id is `com.whatsmyusage.app`. The Keychain item — the name macOS
 shows in the access prompt — is `whatsmyusage.com`. A rebuild after a rename
 asks once more, then copies cookies from the previous names
 (`com.whatsmyusage.app`, `de.getzenai.ai-usage-bar`).
 
-## Using it
+---
 
-The app is a menu bar accessory (no Dock icon). UI is English. First launch is a
-short wizard: welcome (Keychain warning + preview of the macOS prompt) → paste
-cookies (Continue stores them) → here's what we found → close and use the bar.
-The bundle version is the git short hash, shown in Settings and the popover. Chrome: log in → right-click Inspect / ⌥⌘I → Application
-→ Storage → Cookies → the site (claude.ai and a.claude.ai are separate) → ⌘A ⌘C.
+## For developers
+
+Existing bars only show Claude's 5-hour window. Measured 2026-08-15:
+5h window **0 %**, weekly limit **100 %** — the bar would have read "0 %" while the
+account was locked out. The app has to look at every limit and show the **worst**
+one.
+
+### Providers
+
+| Provider | Endpoint | Status |
+|---|---|---|
+| Claude | `/api/bootstrap`, `/api/organizations/{id}/usage` | measured live, see [docs/RESEARCH_CLAUDE_ENDPOINT.md](docs/RESEARCH_CLAUDE_ENDPOINT.md) |
+| ChatGPT | `/api/auth/session` → Bearer → `GET /backend-api/wham/usage` + `rate-limit-reset-credits` (display only) | measured live, see [docs/RESEARCH_CHATGPT_GROK_ENDPOINTS.md](docs/RESEARCH_CHATGPT_GROK_ENDPOINTS.md) |
+| Grok | `POST /rest/rate-limits` (2 h, per model) + `GetGrokCreditsConfig` (weekly, grpc-web) + `GetRemainingResets` (vouchers, display only) | measured live, see [docs/RESEARCH_GROK_WEEKLY_LIMIT.md](docs/RESEARCH_GROK_WEEKLY_LIMIT.md) |
+
+### Handling cookies
+
+Session cookies (`sessionKey`, `__Secure-next-auth.session-token.*`, `sso`) are full
+logins. They **never** belong in a chat, issue, commit, log, or test fixture.
+
+- Entry happens locally in the app, straight from the browser into the paste field.
+- Storage in the macOS Keychain, never in a file in the repo.
+- Test fixtures: real response structure, values replaced by placeholders.
+
+**This repo is public.** The same rule therefore covers everything
+account-related: no org UUIDs, email addresses, org names, or real usage numbers — what gets
+documented is the *shape* of a response, never an account.
+
+On ChatGPT the session token is split across several numbered cookies
+(`…session-token.0`, `…session-token.1`) — extraction has to reassemble the parts sorted by
+index, otherwise the token is silently invalid.
+
+First launch is a short wizard: welcome (Keychain warning + preview of the macOS
+prompt) → paste cookies (Continue stores them) → here's what we found → close
+and use the bar. Chrome: log in → right-click Inspect / ⌥⌘I → Application →
+Storage → Cookies → the site (claude.ai and a.claude.ai are separate) → ⌘A ⌘C.
 Paste in the window. Only the session keys go into the Keychain; the rest of the
 paste is discarded. Two logins of the same provider (two Claude Max emails) are
 two rows. Pasting a refreshed cookie for the same login updates that row.
 
-Settings (the old Cookies window) can hide individual limits, hide an account,
-and reorder cards. That order is the popover and the pill.
-
-The menu bar shows a **pill with one coloured slot per account**. Colour is the
-worst *account-wide* limit of that subscription:
-
-| Colour | Meaning |
-|---|---|
-| green | under 70 % |
-| yellow | 70 – 89 % |
-| orange | 90 – 99 % — nearly out, but still usable |
-| red | locked, or the meter reads 100 % — nothing left to spend |
-
-Red is reserved for the wall. At 95 % you can keep working and at 100 % you
-cannot, and that is the one difference the bar exists to show. Claude never
-sends a lock state, so a full meter counts as blocked on its own.
-
-A full model limit (for example one Claude model) does not paint
-the slot — it stays in the popover. Click the pill for progress bars, remaining
-time until reset, and rename.
-
-Settings can shrink the pill to a **single slot for all accounts**. Its colour
-comes from the mean utilisation of each account's shortest window, on the same
-scale — nothing else. A lock on one account does not paint it red: ChatGPT and
+The compact pill's colour comes from the mean utilisation of each account's
+shortest window. A lock on one account does not paint it red: ChatGPT and
 Grok send `locked` for a meter that reached 100 % and nothing more, so obeying
 any lock made the one slot red almost always. The 100 % is already in the mean.
 Everything shut therefore still reads red, and one open account among four full
-ones lands in the warning band.
+ones lands in the warning band. Claude never sends a lock state, so a full
+meter counts as blocked on its own.
 
-| Key | Action |
-|---|---|
-| ⌘R | Refresh |
-| ⌘, | Settings |
-| ⌘Q | Quit |
-
-It also refreshes every five minutes on its own.
-
-## CLI
+### CLI
 
 `whatsmyusage` with no arguments prints the usage block, then which account
 to use, then one line per account. `--json` is the data structure. Names and
@@ -152,7 +198,7 @@ exit code) to decide whether the account is usable. ChatGPT sends
 `allowed`. Grok's 2-hour window locks at remaining zero; the weekly
 credits call locks only at 100 %.
 
-## Core
+### Core
 
 `UsageBarCore` is testable without a network:
 
@@ -170,10 +216,17 @@ credits call locks only at 100 %.
 One translator per provider. Claude never invents a lock state. ChatGPT takes `allowed`.
 Grok infers locked from `remainingQueries == 0`.
 
-## Website
+### Website
 
 Static landing page in [`site/`](site/). Push to `main` deploys it to
 [whatsmyusage.com](https://whatsmyusage.com) via GitHub Actions → Cloudflare Pages.
+
+### Contributing
+
+Pull requests are welcome. Open an issue first for a larger change. Every PR is
+squashed; title it as a Conventional Commit so the release job can read it.
+`swift test` must pass on the commit you claim it passes on. See
+[AGENTS.md](AGENTS.md) for the rest of the rules.
 
 ## License
 

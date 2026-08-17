@@ -58,7 +58,8 @@ p {
 .lede,
 .wishes p,
 .cta-note,
-.eyebrow {
+.eyebrow,
+.quiet {
   text-wrap: wrap;
 }
 
@@ -210,6 +211,7 @@ code {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 2.4rem;
+  min-width: 0;
   padding: clamp(1.6rem, 5vh, 3.2rem) clamp(1.25rem, 5vw, 5rem) 2.6rem;
 }
 
@@ -232,6 +234,7 @@ code {
 .proof p,
 .get > p,
 .flavor-copy > p,
+.quiet,
 .steps span {
   overflow-wrap: break-word;
 }
@@ -254,9 +257,10 @@ code {
 .hero h1 {
   margin: 0 0 0.7rem;
   font-weight: 700;
-  font-size: clamp(2.4rem, 6.4vw, 4.2rem);
+  font-size: clamp(2.1rem, 8.2vw, 4.2rem);
   letter-spacing: -0.03em;
   line-height: 0.98;
+  overflow-wrap: break-word;
 }
 
 .lede {
@@ -655,17 +659,35 @@ code {
   font-size: clamp(1.05rem, 2vw, 1.25rem);
 }
 
-.flavor-kinds {
+.flavor-teasers {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem 1.15rem;
-  max-width: 22rem;
-  margin: 1.35rem 0 0;
+  flex-direction: column;
+  gap: 0.85rem;
+  margin: 1.45rem 0 0;
   padding: 0;
   list-style: none;
-  color: oklch(0.78 0.015 55);
-  font-size: 0.95rem;
-  font-weight: 550;
+}
+
+.flavor-teasers p {
+  margin: 0;
+  font-size: 0.98rem;
+  font-weight: 620;
+  letter-spacing: -0.02em;
+}
+
+.flavor-teasers span {
+  display: block;
+  color: oklch(0.74 0.015 55);
+  font-size: 0.88rem;
+  line-height: 1.35;
+}
+
+.quiet {
+  max-width: 40rem;
+  margin: 0;
+  padding: 0 clamp(1.25rem, 5vw, 5rem) clamp(3rem, 7vw, 5rem);
+  color: var(--muted);
+  font-size: clamp(1.05rem, 2vw, 1.25rem);
 }
 
 .flavor .achievements {
@@ -895,13 +917,20 @@ code {
     display: none;
   }
 
+  .hero h1 {
+    text-wrap: wrap;
+  }
+
   .hero-actions {
     flex-direction: column;
     align-items: flex-start;
   }
 
-  .hero-stage {
+  .hero-stage,
+  .hero-copy,
+  .hero-pill {
     width: 100%;
+    max-width: 100%;
   }
 
   .slot-name {
@@ -945,10 +974,7 @@ code {
     margin-inline: auto;
   }
 
-  .flavor-kinds {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 0.38rem;
+  .flavor-teasers {
     max-width: none;
   }
 }
