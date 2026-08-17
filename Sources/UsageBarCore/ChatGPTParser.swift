@@ -56,7 +56,10 @@ enum ChatGPTParser {
               let count = JSONValue.int(root["available_count"]),
               count >= 0
         else { return nil }
-        return count >= 1 ? .available(count) : .none
+        // `ResetRead.none`, spelled out: a bare `.none` in a `ResetRead?` context
+        // resolves to `Optional.none` — nil — and nil means "we did not read this",
+        // which keeps the stale count on screen. Zero vouchers is a reading.
+        return count >= 1 ? .available(count) : ResetRead.none
     }
 
     /// `allowed` is the honest field. Missing `allowed` stays unknown — `limit_reached`

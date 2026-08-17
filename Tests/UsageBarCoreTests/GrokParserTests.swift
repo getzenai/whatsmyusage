@@ -121,8 +121,8 @@ struct GrokParserTests {
         // Live misshapen-looking 0-byte data frame is a successful empty list.
         let framed = UsageParser.parseGrokRemainingResets(body: GrpcWeb.encode(message: Data()))
         let requestShape = UsageParser.parseGrokRemainingResets(body: GrpcWeb.emptyRequest)
-        #expect(framed == .none)
-        #expect(requestShape == .none)
+        #expect(framed == ResetRead.none)
+        #expect(requestShape == ResetRead.none)
         #expect(framed?.count == nil)
     }
 
@@ -131,6 +131,20 @@ struct GrokParserTests {
         #expect(UsageParser.parseGrokRemainingResets(body: trailer) == nil)
         let failed = GrpcWeb.encode(message: Data(), trailerStatus: 13)
         #expect(UsageParser.parseGrokRemainingResets(body: failed) == nil)
+    }
+
+    /// A failed call carrying a data frame anyway: the trailer decides, and the
+    /// trailer is CRLF. Reading the tokens here would report vouchers from a
+    /// call the server said went wrong.
+    @Test func remainingResetsFailedStatusBeatsTheDataFrame() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let token = GrokResetWire.token(id: "a", end: 1_800_000_100)
+        #expect(UsageParser.parseGrokRemainingResets(body: GrokResetWire.frame(tokens: [token]), now: now)
+            == .available(1))
+
+        let message = GrokResetWire.field(10, message: token)
+        let failed = GrpcWeb.encode(message: message, trailerStatus: 13)
+        #expect(UsageParser.parseGrokRemainingResets(body: failed, now: now) == nil)
     }
 
     @Test func remainingResetsCountsUnexpiredTokensRegardlessOfOrder() {
@@ -156,7 +170,7 @@ struct GrokParserTests {
         let emptyID = GrokResetWire.token(id: "", end: 1_800_000_100)
         let noEnd = GrokResetWire.field(10, string: "keep")
         let body = GrokResetWire.frame(tokens: [emptyID, noEnd])
-        #expect(UsageParser.parseGrokRemainingResets(body: body, now: now) == .none)
+        #expect(UsageParser.parseGrokRemainingResets(body: body, now: now) == ResetRead.none)
     }
 
     @Test func remainingResetsOneTokenLabel() {

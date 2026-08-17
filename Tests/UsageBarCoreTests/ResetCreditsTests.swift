@@ -9,7 +9,7 @@ struct ResetCreditsTests {
 
     @Test func grokEmptyDataFrameIsNoneNotZeroGuess() {
         let body = GrpcWeb.encode(message: Data())
-        #expect(UsageParser.parseGrokRemainingResets(body: body, now: now) == .none)
+        #expect(UsageParser.parseGrokRemainingResets(body: body, now: now) == ResetRead.none)
     }
 
     @Test func grokTrailerWithoutDataFrameIsAMiss() {
@@ -38,21 +38,21 @@ struct ResetCreditsTests {
         let body = ResetWire.grok(tokens: [
             ResetWire.token(id: "tok-old", start: now.addingTimeInterval(-86_400), end: now.addingTimeInterval(-1)),
         ])
-        #expect(UsageParser.parseGrokRemainingResets(body: body, now: now) == .none)
+        #expect(UsageParser.parseGrokRemainingResets(body: body, now: now) == ResetRead.none)
     }
 
     @Test func grokEmptyTokenIdDoesNotCount() {
         let body = ResetWire.grok(tokens: [
             ResetWire.token(id: "", start: now.addingTimeInterval(-3600), end: now.addingTimeInterval(3600)),
         ])
-        #expect(UsageParser.parseGrokRemainingResets(body: body, now: now) == .none)
+        #expect(UsageParser.parseGrokRemainingResets(body: body, now: now) == ResetRead.none)
     }
 
     @Test func grokFutureStartDoesNotCountToday() {
         let body = ResetWire.grok(tokens: [
             ResetWire.token(id: "tok-later", start: now.addingTimeInterval(3600), end: now.addingTimeInterval(86_400)),
         ])
-        #expect(UsageParser.parseGrokRemainingResets(body: body, now: now) == .none)
+        #expect(UsageParser.parseGrokRemainingResets(body: body, now: now) == ResetRead.none)
     }
 
     @Test func grokMissingStartStillCountsWhenEndIsFuture() {
@@ -64,7 +64,7 @@ struct ResetCreditsTests {
 
     @Test func chatGPTZeroIsNoneNotAGuess() {
         let body = Data(#"{"available_count":0,"credits":[],"immediate_reset_purchase_eligible":false}"#.utf8)
-        #expect(UsageParser.parseChatGPTResetCredits(body: body) == .none)
+        #expect(UsageParser.parseChatGPTResetCredits(body: body) == ResetRead.none)
     }
 
     @Test func chatGPTPositiveCountIsAvailable() {
