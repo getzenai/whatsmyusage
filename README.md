@@ -51,8 +51,10 @@ that already exists under a different name.
 
 The app icon and the site's favicon are one drawing: `Scripts/make-icon.swift`
 renders `Resources/AppIcon.icns` and `site/favicon.png` from `site/cat-fabi.svg`
-— the hero cat — on the site's ginger square, with the stroke thickened at the
-small sizes so the silhouette survives 16 px. Both outputs are committed, so a
+— the hero cat — on the app's yellow square, with the stroke thickened at the
+middle sizes. At 64 px and below the whole cat runs into mush however thick the
+pen, so those sizes show only the cross on the cat's rear; the favicon is one of
+them, because a browser tab is 16 px. Both outputs are committed, so a
 build needs neither the script nor an SVG renderer. Run it when the drawing or
 the brand colours change.
 

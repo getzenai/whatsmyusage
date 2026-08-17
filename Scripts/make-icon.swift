@@ -1,6 +1,7 @@
 #!/usr/bin/env swift
 // Renders Resources/AppIcon.icns and site/favicon.png from site/cat-fabi.svg —
-// the same cat the landing page uses — on the app's yellow square.
+// the same cat the landing page uses — on the app's yellow square. Above 64 px
+// the whole cat; at 64 and below only the cross on its rear.
 //
 // Usage: Scripts/make-icon.swift
 //
@@ -66,13 +67,59 @@ else {
 /// one pixel wide and turns to grey mush. Thickening the stroke as the icon
 /// shrinks keeps the silhouette readable; the large sizes stay untouched.
 func cat(for size: Int) -> NSImage {
-    let weight = size <= 64 ? "9" : size <= 128 ? "6" : "3.5"
+    let weight = size <= 128 ? "6" : "3.5"
     let scaled = drawing.replacingOccurrences(of: #"stroke-width="3.5""#, with: #"stroke-width="\#(weight)""#)
     guard let image = NSImage(data: Data(scaled.utf8)) else {
         FileHandle.standardError.write(Data("error: cannot render the cat at \(size)\n".utf8))
         exit(1)
     }
     return image
+}
+
+// The rear cross is two strokes of the drawing, marked `class="rear-cross"` in
+// the SVG so this script can ask for the part by name instead of by position.
+// Its box is measured from those strokes' own endpoints, so the two anchors are
+// asserted below: move the cross in the drawing and the assertion fires rather
+// than the crop going quietly wrong.
+let crossAnchors = ["1424.1987, 436.2081", "1422.7039, 452.3227"]
+let crossPadding = 3.0    // room for the round caps at the thickened weight
+let crossBox = (
+    x: 1422.7039 - crossPadding,
+    y: 436.2081 - crossPadding,
+    width: 13.9317 + 2 * crossPadding,      // 1436.6356 − 1422.7039
+    height: 16.1146 + 2 * crossPadding      // 452.3227 − 436.2081
+)
+
+/// The cat's rear cross alone, lifted out of the drawing.
+func rearCross() -> NSImage {
+    let groups = drawing.components(separatedBy: "<g ")
+        .filter { $0.hasPrefix(#"class="rear-cross""#) }
+        .compactMap { chunk in (chunk.range(of: "</g>")).map { "<g " + chunk[..<$0.upperBound] } }
+    guard groups.count == 2, crossAnchors.allSatisfy(drawing.contains) else {
+        FileHandle.standardError.write(Data("error: \(source.path) no longer has the two rear-cross strokes at their measured anchors\n".utf8))
+        exit(1)
+    }
+    let svg = """
+        <svg xmlns="http://www.w3.org/2000/svg" width="\(crossBox.width)" height="\(crossBox.height)" \
+        viewBox="\(crossBox.x) \(crossBox.y) \(crossBox.width) \(crossBox.height)" \
+        stroke-linecap="round" stroke-linejoin="round">\(groups.joined())</svg>
+        """
+        .replacingOccurrences(of: #"stroke-width="3.5""#, with: #"stroke-width="4.5""#)
+    guard let image = NSImage(data: Data(svg.utf8)) else {
+        FileHandle.standardError.write(Data("error: cannot render the rear cross\n".utf8))
+        exit(1)
+    }
+    return image
+}
+
+/// What the icon shows at `size`, and how tall it stands on the 1024 grid.
+///
+/// Above 64 px the whole cat. At 64 and below only the rear cross: a cat seen
+/// from behind is a dozen strokes, and on a 16 px grid they run into each other
+/// into grey mush however thick the pen. Two crossing strokes stay a cross —
+/// and it is the mark you recognise the drawing by anyway.
+func glyph(for size: Int) -> (image: NSImage, height: Double) {
+    size <= 64 ? (rearCross(), 450) : (cat(for: size), 600)
 }
 
 /// Draws the icon at `size` points into a fresh bitmap.
@@ -103,20 +150,20 @@ func render(size: Int) -> NSBitmapImageRep {
     squircle.addClip()
     NSGradient(starting: yellow, ending: yellowDeep)?.draw(in: plate, angle: -90)
 
-    // The cat is a black line drawing. Draw it into the alpha channel, then
+    // The drawing is black line art. Draw it into the alpha channel, then
     // flood it with ink through `sourceIn` — that recolours the strokes
     // without touching the SVG.
-    let cat = cat(for: size)
-    let catHeight = 600.0 * scale
-    let catWidth = catHeight * (cat.size.width / cat.size.height)
+    let (drawn, tall) = glyph(for: size)
+    let drawnHeight = tall * scale
+    let drawnWidth = drawnHeight * (drawn.size.width / drawn.size.height)
     let frame = NSRect(
-        x: (Double(size) - catWidth) / 2,
-        y: (Double(size) - catHeight) / 2,
-        width: catWidth,
-        height: catHeight
+        x: (Double(size) - drawnWidth) / 2,
+        y: (Double(size) - drawnHeight) / 2,
+        width: drawnWidth,
+        height: drawnHeight
     )
     context.cgContext.beginTransparencyLayer(auxiliaryInfo: nil)
-    cat.draw(in: frame)
+    drawn.draw(in: frame)
     ink.setFill()
     frame.fill(using: .sourceIn)
     context.cgContext.endTransparencyLayer()
@@ -161,8 +208,8 @@ let bytes = (try Data(contentsOf: destination)).count
 print("Wrote \(destination.path) (\(bytes) bytes)")
 
 // The tab icon is the app icon, not a second drawing. 64 px: browsers scale it
-// down to 16 or 32 themselves, and at 64 the stroke is already thickened, so
-// what they shrink is a readable silhouette rather than hairlines.
+// down to 16 or 32 themselves, so what they shrink is the cross — which is what
+// a tab has room for — rather than a cat turning into hairlines.
 guard let png = render(size: 64).representation(using: .png, properties: [:]) else {
     FileHandle.standardError.write(Data("error: cannot encode the favicon\n".utf8))
     exit(1)
