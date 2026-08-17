@@ -107,6 +107,11 @@ A full model limit (for example one Claude model) does not paint
 the slot — it stays in the popover. Click the pill for progress bars, remaining
 time until reset, and rename.
 
+Settings has a **Start at login** checkbox. It calls `SMAppService`, the same
+switch as System Settings › General › Login Items, and stores nothing of its
+own — the checkbox always shows what launchd has registered. Only the `.app`
+can register itself; running the bare `swift run` binary leaves it disabled.
+
 Settings can shrink the pill to a **single slot for all accounts**. Its colour
 comes from the mean utilisation of each account's shortest window, on the same
 scale — nothing else. A lock on one account does not paint it red: ChatGPT and

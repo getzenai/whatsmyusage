@@ -39,6 +39,7 @@ final class SettingsController: NSObject, NSWindowDelegate {
     func show(startingAt step: OnboardingStep? = nil) {
         NSApp.setActivationPolicy(.regular)
         model.prefs = DisplayStore.load()
+        model.refreshLoginItem()
         if let step {
             model.step = step
         } else if !OnboardingState.didFinishWelcome {
@@ -85,6 +86,13 @@ final class SettingsController: NSObject, NSWindowDelegate {
         } else if model.step == .detected {
             syncRoot()
         }
+    }
+
+    /// The user can flip the same switch in System Settings while this window
+    /// sits behind it. Coming back is the moment to ask launchd again.
+    func windowDidBecomeKey(_ notification: Notification) {
+        model.refreshLoginItem()
+        syncRoot()
     }
 
     func windowWillClose(_ notification: Notification) {
@@ -141,8 +149,25 @@ final class SettingsController: NSObject, NSWindowDelegate {
             },
             setPill: { [weak self] style in
                 self?.mutatePrefs { $0.pill = style }
-            }
+            },
+            setStartAtLogin: { [weak self] enabled in
+                self?.setStartAtLogin(enabled)
+            },
+            openLoginItemSettings: { LoginItem.openSystemSettings() }
         )
+    }
+
+    private func setStartAtLogin(_ enabled: Bool) {
+        do {
+            try LoginItem.set(enabled)
+            model.refreshLoginItem()
+        } catch {
+            // Whatever launchd refused, the checkbox must end up showing what
+            // is actually registered — not what was clicked.
+            model.refreshLoginItem()
+            model.loginItemNote = "macOS refused: \(error.localizedDescription)"
+        }
+        syncRoot()
     }
 
     private func mutatePrefs(_ body: (inout DisplayPreferences) -> Void) {
@@ -273,6 +298,20 @@ final class OnboardingModel {
     var pendingDeleteID: String?
     var pendingDeleteMessage: String = ""
     var showingDeleteConfirm = false
+    /// Read from launchd, never stored. `refreshLoginItem` is the only writer.
+    var startsAtLogin = false
+    var loginItemNote: String?
+
+    func refreshLoginItem() {
+        startsAtLogin = LoginItem.isEnabled
+        if !LoginItem.isAvailable {
+            loginItemNote = "Only the installed WhatsMyUsage.app can start itself."
+        } else if LoginItem.needsApproval {
+            loginItemNote = "Login Items in System Settings is holding this back — allow it there."
+        } else {
+            loginItemNote = nil
+        }
+    }
 
     func refreshKeychainSummary() {
         let store = KeychainStore.load()
@@ -306,6 +345,8 @@ struct OnboardingActions {
     var rename: (String, String) -> Void
     var welcomeContinued: () -> Void
     var setPill: (PillStyle) -> Void
+    var setStartAtLogin: (Bool) -> Void
+    var openLoginItemSettings: () -> Void
 }
 
 struct OnboardingRoot: View {
@@ -439,6 +480,7 @@ struct OnboardingRoot: View {
                 .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
             }
             pillPicker
+            loginItemPicker
             Spacer(minLength: 0)
         }
         .alert("Remove this login?", isPresented: $model.showingDeleteConfirm) {
@@ -463,6 +505,29 @@ struct OnboardingRoot: View {
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var loginItemPicker: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Toggle(isOn: Binding(
+                get: { model.startsAtLogin },
+                set: { actions.setStartAtLogin($0) }
+            )) {
+                Text("Start at login")
+                    .font(.system(size: 13))
+            }
+            .toggleStyle(.checkbox)
+            .disabled(!LoginItem.isAvailable)
+            if let note = model.loginItemNote {
+                Button(action: actions.openLoginItemSettings) {
+                    Text(note)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .buttonStyle(.plain)
+            }
         }
     }
 
