@@ -20,11 +20,18 @@ BUNDLE_ID="com.whatsmyusage.app"
 APP_NAME="WhatsMyUsage"
 PRODUCT_NAME="UsageBar"
 ICON_NAME="AppIcon"
+# The appcast the running app polls. It is written by the release job and
+# served from the site; see docs/UPDATES.md.
+FEED_URL="https://whatsmyusage.com/appcast.xml"
+# Public half of the EdDSA key that signs every release archive. The private
+# half is in the maintainer's login Keychain and in the repo secrets; nothing
+# signed with another key installs, even from our own release page.
+PUBLIC_ED_KEY="WZ8ngc8y80gngYdd3F4E5cwS0HqWvecQGBAPPQ67XfA="
 cd "$(dirname "$0")/.."
 REPO_ROOT="$PWD"
 
 # The latest v<x.y.z> tag is the version; there is no second copy of it to go
-# stale. A build made after the tag still says the tag's version — CFBundleVersion
+# stale. A build made after the tag still says the tag's version — WMUBuildCommit
 # below carries the commit, which is what tells two builds apart.
 VERSION="$(python3 Scripts/semver.py current)"
 BUILD="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
@@ -117,7 +124,12 @@ cat > "$APP_PATH/Contents/Info.plist" <<PLIST
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
     <string>$VERSION</string>
+    <!-- Sparkle compares this one, so it has to be comparable: a git hash is
+         not greater or smaller than another git hash. The commit lives in
+         WMUBuildCommit below, where nothing does arithmetic on it. -->
     <key>CFBundleVersion</key>
+    <string>$VERSION</string>
+    <key>WMUBuildCommit</key>
     <string>$BUILD</string>
     <key>LSMinimumSystemVersion</key>
     <string>14.0</string>
@@ -125,9 +137,33 @@ cat > "$APP_PATH/Contents/Info.plist" <<PLIST
     <true/>
     <key>NSHumanReadableCopyright</key>
     <string>MIT</string>
+    <key>SUFeedURL</key>
+    <string>$FEED_URL</string>
+    <key>SUPublicEDKey</key>
+    <string>$PUBLIC_ED_KEY</string>
+    <!-- The background check starts off. Without this Sparkle asks the user on
+         the first launch, and a modal about updates is not the first thing a
+         new app should say. Settings has the switch. -->
+    <key>SUEnableAutomaticChecks</key>
+    <false/>
 </dict>
 </plist>
 PLIST
+
+# Sparkle ships as an XCFramework and SwiftPM only links it — there is no Xcode
+# copy phase here, so the bundle gets one by hand. Without this the app builds
+# and then dies at launch with "Library not loaded: @rpath/Sparkle.framework".
+# The matching rpath is set in Package.swift.
+FRAMEWORK_SRC=$(find "$REPO_ROOT/.build/artifacts" -type d -name Sparkle.framework -path "*macos*" -maxdepth 6 | head -1)
+if [[ -z "$FRAMEWORK_SRC" ]]; then
+    echo "error: Sparkle.framework not found under .build/artifacts — run 'swift build' first" >&2
+    exit 1
+fi
+echo "==> Embedding $(basename "$FRAMEWORK_SRC")"
+mkdir -p "$APP_PATH/Contents/Frameworks"
+# ditto, not cp: the framework is a bundle of symlinks and a flattened copy
+# fails to load.
+ditto "$FRAMEWORK_SRC" "$APP_PATH/Contents/Frameworks/Sparkle.framework"
 
 SIGN_IDENTITY="${USAGE_BAR_SIGN_IDENTITY:--}"
 echo "==> Signing with identity: $SIGN_IDENTITY"
@@ -143,8 +179,32 @@ else
     # with the certificate in 2031 instead of outliving it.
     SIGN_ARGS+=(--timestamp)
 fi
+
+# Inside out. Every nested bundle carries its own signature, and signing the
+# outer app first would seal a framework whose contents are still unsigned —
+# codesign --verify --deep then rejects the app it just made. The helpers get
+# the same hardened runtime and timestamp as the app: notarisation looks at
+# every executable in the bundle, not just the outermost one.
+FRAMEWORK="$APP_PATH/Contents/Frameworks/Sparkle.framework"
+# Versions/Current, not Versions/B: the letter is Sparkle's business. A rename
+# would make the loop sign nothing at all and leave upstream's signature on a
+# bundle we just copied, which is the kind of quiet miss that surfaces months
+# later at notarisation.
+for nested in \
+    "XPCServices/Downloader.xpc" \
+    "XPCServices/Installer.xpc" \
+    "Updater.app" \
+    "Autoupdate"; do
+    path="$FRAMEWORK/Versions/Current/$nested"
+    if [[ ! -e "$path" ]]; then
+        echo "error: Sparkle layout changed — $nested is missing" >&2
+        exit 1
+    fi
+    codesign "${SIGN_ARGS[@]}" "$path"
+done
+codesign "${SIGN_ARGS[@]}" "$FRAMEWORK"
 codesign "${SIGN_ARGS[@]}" "$APP_PATH"
-codesign --verify --verbose=2 "$APP_PATH"
+codesign --verify --deep --verbose=2 "$APP_PATH"
 codesign -d -r- "$APP_PATH" 2>&1 | sed -n 's/^.*designated => /designated => /p'
 
 # Copy the CLI onto PATH so agents can run `whatsmyusage status --json`

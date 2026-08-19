@@ -241,10 +241,22 @@ credits call locks only at 100 %.
 One translator per provider. Claude never invents a lock state. ChatGPT takes `allowed`.
 Grok infers locked from `remainingQueries == 0`.
 
+### Updates
+
+The app can update itself with [Sparkle 2](https://sparkle-project.org):
+**Settings → Check for updates automatically**, plus a **Check now** button and
+a **Check for Updates…** menu item. The automatic check starts off.
+
+The feed is empty until the first signed and notarised release fills it —
+Sparkle refuses anything else, so an unsigned build in the feed would only turn
+every check into an error. What is wired, what is missing, and where the keys
+live: [`docs/UPDATES.md`](docs/UPDATES.md).
+
 ### Website
 
 Static landing page in [`site/`](site/). Push to `main` deploys it to
 [whatsmyusage.com](https://whatsmyusage.com) via GitHub Actions → Cloudflare Pages.
+The update feed [`site/appcast.xml`](site/appcast.xml) ships with it.
 
 ### Contributing
 
