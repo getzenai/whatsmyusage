@@ -196,7 +196,8 @@ enum PillImage {
             for (index, segment) in slots.enumerated() {
                 let x = pad + CGFloat(index) * (segmentWidth + gap)
                 let slot = NSRect(x: x, y: 3, width: segmentWidth, height: height - 6)
-                color(for: segment.tone).setFill()
+                let fill = color(for: segment.tone)
+                fill.setFill()
                 NSBezierPath(roundedRect: slot, xRadius: 2, yRadius: 2).fill()
 
                 guard disrupted.contains(segment.trackingID) else { continue }
@@ -207,8 +208,11 @@ enum PillImage {
                     height: dotDiameter
                 )
                 // Ink, not a new hue: the palette says "how full", and a
-                // disruption somewhere else is not a fuller meter.
-                NSColor.labelColor.setFill()
+                // disruption somewhere else is not a fuller meter. The ink
+                // follows the slot, not the system theme — `labelColor` in
+                // Dark Mode is nearly white, and white on `systemGreen` is
+                // 2:1.
+                nsColor(for: DisruptionInk.on(fill: srgb(of: fill))).setFill()
                 NSBezierPath(ovalIn: dot).fill()
             }
             return true
@@ -226,5 +230,19 @@ enum PillImage {
         case .error: return .systemRed.withAlphaComponent(0.7)
         case .idle, .expired: return .systemGray
         }
+    }
+
+    private static func srgb(of color: NSColor) -> SRGBColor {
+        let converted = color.usingColorSpace(.sRGB) ?? NSColor(srgbRed: 0, green: 0, blue: 0, alpha: 1)
+        return SRGBColor(
+            red: Double(converted.redComponent),
+            green: Double(converted.greenComponent),
+            blue: Double(converted.blueComponent)
+        )
+    }
+
+    private static func nsColor(for ink: DisruptionInk) -> NSColor {
+        let c = ink.color
+        return NSColor(srgbRed: c.red, green: c.green, blue: c.blue, alpha: 1)
     }
 }
