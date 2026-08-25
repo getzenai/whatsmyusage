@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The update feed the app polls (SUFeedURL in the bundle's Info.plist).
+
+  The copy in the repo is the empty skeleton. The filled-in feed is attached to
+  each GitHub release as `appcast.xml`, and https://whatsmyusage.com/appcast.xml
+  redirects to the latest release's copy. It cannot be a file in this repo: the
+  entry can only be written once Apple has notarised the build, and the release
+  job may not push to a protected `main`.
+
+  One item per feed — the newest release. Sparkle offers the highest version it
+  finds, so older entries would be history and nothing else. See docs/UPDATES.md.
+-->
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+  <channel>
+    <title>WhatsMyUsage</title>
+    <link>https://whatsmyusage.com/appcast.xml</link>
+    <description>Updates for WhatsMyUsage</description>
+    <language>en</language>
+  </channel>
+</rss>

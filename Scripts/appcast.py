@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-"""Put one release into site/appcast.xml, the feed Sparkle polls.
+"""Put one release into an appcast, the feed Sparkle polls.
 
-The feed is a plain RSS file in the repo, deployed with the rest of the site.
-The release job calls this after Apple has notarised the build and
-`sign_update` has signed the archive, so an item only ever appears for
-something a user could actually install.
+The feed starts as the empty skeleton in Scripts/appcast-template.xml and ends
+up attached to the GitHub release as `appcast.xml`. The release job calls this
+after Apple has notarised the build and `sign_update` has signed the archive,
+so an item only ever appears for something a user could actually install.
 
 Rewriting XML with a text template would be the obvious shortcut and a bad
 one: an unescaped `&` in a release note produces a feed that no longer parses,
 and every installed copy then reports an error instead of an update. This goes
 through ElementTree, which escapes for us.
 
-    appcast.py add --version 0.6.0 \
+    appcast.py add --feed feed.xml --version 0.6.0 \
         --url https://…/WhatsMyUsage.zip \
         --signature 'sparkle:edSignature="…" length="123"' \
         --notes-file release-notes.md
@@ -27,7 +27,7 @@ import sys
 import xml.etree.ElementTree as ET
 
 SPARKLE = "http://www.andymatuschak.org/xml-namespaces/sparkle"
-FEED = pathlib.Path(__file__).resolve().parent.parent / "site" / "appcast.xml"
+TEMPLATE = pathlib.Path(__file__).resolve().parent / "appcast-template.xml"
 MINIMUM_SYSTEM_VERSION = "14.0"  # LSMinimumSystemVersion in make-app-bundle.sh
 
 
@@ -88,7 +88,10 @@ def add(args: argparse.Namespace) -> int:
     # means, and a round trip that silently drops it would take the warning
     # away from whoever reads the feed next.
     parser = ET.XMLParser(target=ET.TreeBuilder(insert_comments=True))
-    tree = ET.parse(FEED, parser=parser)
+    feed = pathlib.Path(args.feed)
+    # A missing feed is the normal case: the release job hands us a fresh copy
+    # of the skeleton. Falling back to the skeleton keeps a hand-run honest too.
+    tree = ET.parse(feed if feed.exists() else TEMPLATE, parser=parser)
     channel = tree.getroot().find("channel")
     if channel is None:
         raise SystemExit("error: appcast has no <channel>")
@@ -131,10 +134,10 @@ def add(args: argparse.Namespace) -> int:
     channel.insert(first_item, item)
 
     ET.indent(tree, space="  ")
-    tree.write(FEED, encoding="utf-8", xml_declaration=True)
-    with FEED.open("a", encoding="utf-8") as handle:
+    tree.write(feed, encoding="utf-8", xml_declaration=True)
+    with feed.open("a", encoding="utf-8") as handle:
         handle.write("\n")
-    print(f"added {version} to {FEED}")
+    print(f"added {version} to {feed}")
     return 0
 
 
@@ -142,6 +145,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
     add_parser = sub.add_parser("add", help="add or replace one version")
+    add_parser.add_argument("--feed", required=True, help="feed to write; created from the template if absent")
     add_parser.add_argument("--version", required=True)
     add_parser.add_argument("--url", required=True, help="download URL of the zip")
     add_parser.add_argument("--release-url", required=True, help="the release page")

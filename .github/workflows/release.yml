@@ -251,49 +251,32 @@ jobs:
             | "$sign_update" --ed-key-file - "$RUNNER_TEMP/WhatsMyUsage.zip")
           echo "signature=$signature" >> "$GITHUB_OUTPUT"
 
-      # The feed is a file in the repo that the site deploy publishes, so the
-      # entry has to land on main. It goes in after the release is public: a
-      # feed that points at an asset nobody can download yet is worse than a
-      # feed that is one minute behind.
-      - name: Put the release in the update feed
+      # The feed is attached to the release, not committed to the repo: the
+      # entry can only be written once the archive is notarised and signed, and
+      # `main` is protected — a push from the job is refused, rightly.
+      # https://whatsmyusage.com/appcast.xml redirects to the latest release's
+      # copy, so the URL baked into every shipped bundle keeps working.
+      - name: Attach the update feed to the release
         env:
           GH_TOKEN: ${{ github.token }}
           SIGNATURE: ${{ steps.sparkle.outputs.signature }}
         run: |
           set -euo pipefail
-          work="$RUNNER_TEMP/feed"
-          # The credential helper, not the token in the URL: a URL with a
-          # password in it lands in argv, in the remote config, and in every
-          # `git remote -v` from here on.
-          gh auth setup-git
-          git clone --depth 1 --branch main \
-            "https://github.com/$GITHUB_REPOSITORY.git" "$work"
-          gh release view "v$VERSION" --json body --jq .body > "$work/notes.md"
+          feed="$RUNNER_TEMP/appcast.xml"
+          gh release view "v$VERSION" --json body --jq .body > "$RUNNER_TEMP/notes.md"
           base="https://github.com/$GITHUB_REPOSITORY/releases"
-          python3 "$work/Scripts/appcast.py" add \
+          python3 Scripts/appcast.py add \
+            --feed "$feed" \
             --version "$VERSION" \
             --url "$base/download/v$VERSION/WhatsMyUsage.zip" \
             --release-url "$base/tag/v$VERSION" \
             --signature "$SIGNATURE" \
-            --notes-file "$work/notes.md"
-          cd "$work"
-          rm -f notes.md
-          if git diff --quiet -- site/appcast.xml; then
-            echo "feed already offers v$VERSION; nothing to push"
-            exit 0
-          fi
-          git -c user.name=github-actions -c user.email=github-actions@github.com \
-            commit -m "chore(site): offer v$VERSION in the update feed" -- site/appcast.xml
-          # Someone else may have pushed to main while Apple was thinking.
-          git push origin main || {
-            git -c user.name=github-actions -c user.email=github-actions@github.com \
-              pull --rebase origin main
-            git push origin main
-          }
-
-          # A push made with GITHUB_TOKEN does not start another workflow, so
-          # the site deploy would never see this commit. Ask for it by name.
-          gh workflow run deploy-site.yml --ref main
+            --notes-file "$RUNNER_TEMP/notes.md"
+          # Refuse to ship a feed that no parser would read. Sparkle reports a
+          # broken feed as an error on every machine that polls it.
+          python3 -c 'import sys,xml.etree.ElementTree as ET; ET.parse(sys.argv[1])' "$feed"
+          gh release upload "v$VERSION" "$feed" --clobber
+          echo "Update feed attached to v$VERSION" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Remove the signing keychain
         if: always()

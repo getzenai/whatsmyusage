@@ -256,7 +256,8 @@ live: [`docs/UPDATES.md`](docs/UPDATES.md).
 
 Static landing page in [`site/`](site/). Push to `main` deploys it to
 [whatsmyusage.com](https://whatsmyusage.com) via GitHub Actions → Cloudflare Pages.
-The update feed [`site/appcast.xml`](site/appcast.xml) ships with it.
+`whatsmyusage.com/appcast.xml` redirects to the update feed, which the release
+job attaches to the newest GitHub release.
 
 ### Contributing
 
