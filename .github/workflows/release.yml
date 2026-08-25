@@ -7,6 +7,13 @@ name: Release
 #
 # The tag is the only record of the version: there is no VERSION file, and
 # Scripts/make-app-bundle.sh reads the tag too.
+#
+# Two jobs, and the split is deliberate. `tag` decides the version and opens a
+# DRAFT release; `notarize` builds the app on macOS, has Apple notarise it, and
+# only then publishes. A draft is invisible on the releases page and is not
+# "latest", so the download button on whatsmyusage.com can never point at a
+# build Gatekeeper would refuse. If notarisation fails the draft stays, the tag
+# stays, and nobody downloads anything.
 
 on:
   push:
@@ -14,10 +21,13 @@ on:
   workflow_dispatch: {}
 
 jobs:
-  release:
+  tag:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: write
+    outputs:
+      bump: ${{ steps.decide.outputs.bump }}
+      version: ${{ steps.decide.outputs.version }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -47,7 +57,7 @@ jobs:
           python3 Scripts/semver.py notes > release-notes.md
           cat release-notes.md >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Tag and release
+      - name: Tag and open the draft release
         if: steps.decide.outputs.bump != 'none'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -61,9 +71,168 @@ jobs:
           git -c user.name=github-actions -c user.email=github-actions@github.com \
             tag -a "v$VERSION" -m "v$VERSION"
           git push origin "v$VERSION"
-          gh release create "v$VERSION" --title "v$VERSION" --notes-file release-notes.md
+          gh release create "v$VERSION" --draft --title "v$VERSION" --notes-file release-notes.md
 
-      # TODO(apple-developer): once the Developer ID certificate is in the repo
-      # secrets, build and notarise WhatsMyUsage.app here on a macos runner and
-      # attach the zip with `gh release upload "v$VERSION"`. The version comes
-      # from the tag this job just pushed, so nothing else has to change.
+  notarize:
+    needs: tag
+    if: needs.tag.outputs.bump != 'none'
+    runs-on: blacksmith-6vcpu-macos-15
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.tag.outputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: v${{ needs.tag.outputs.version }}
+          fetch-depth: 0  # make-app-bundle.sh reads the version off the tag
+
+      # Stop here rather than three steps later with a confusing codesign error.
+      # A release that quietly falls back to an ad-hoc signature is worse than
+      # no release: it looks installable and Gatekeeper refuses it on the user's
+      # machine, not ours.
+      - name: Require the signing secrets
+        env:
+          P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          P12_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          TEAM_ID: ${{ secrets.MACOS_TEAM_ID }}
+          API_KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
+          API_ISSUER_ID: ${{ secrets.APPSTORE_API_ISSUER_ID }}
+          API_PRIVATE_KEY: ${{ secrets.APPSTORE_API_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          missing=()
+          for name in P12 P12_PASSWORD TEAM_ID API_KEY_ID API_ISSUER_ID API_PRIVATE_KEY; do
+            [ -n "${!name:-}" ] || missing+=("$name")
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "error: missing signing secrets: ${missing[*]}" >&2
+            exit 1
+          fi
+
+      # A keychain that exists for this job and nothing else. The certificate
+      # never touches the runner's login keychain, and the whole thing goes at
+      # the end even when a step above failed.
+      - name: Import the Developer ID certificate
+        id: keychain
+        env:
+          P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          P12_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          keychain_password="$(openssl rand -base64 24)"
+          echo "::add-mask::$keychain_password"
+          echo "keychain=$keychain" >> "$GITHUB_OUTPUT"
+
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"   # no auto-lock mid-build
+          security unlock-keychain -p "$keychain_password" "$keychain"
+
+          printf '%s' "$P12" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security import "$RUNNER_TEMP/certificate.p12" -k "$keychain" \
+            -P "$P12_PASSWORD" -T /usr/bin/codesign -f pkcs12
+          rm -f "$RUNNER_TEMP/certificate.p12"
+
+          # "Developer ID - G2", the intermediate between the leaf and the
+          # Apple root. `security export` put it in the .p12, so this is a
+          # second copy for the day someone re-exports without the chain —
+          # not a reason to fail the release if apple.com is slow.
+          if curl -fsSL --retry 2 -o "$RUNNER_TEMP/DeveloperIDG2CA.cer" \
+               https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer; then
+            security import "$RUNNER_TEMP/DeveloperIDG2CA.cer" -k "$keychain" \
+              -T /usr/bin/codesign || true
+          else
+            echo "note: could not fetch the G2 intermediate; using the copy from the .p12"
+          fi
+
+          # Without this, codesign gets a GUI password prompt on a machine with
+          # no one at the keyboard, and the job hangs until it times out.
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$keychain_password" "$keychain" > /dev/null
+
+          # Put it in front of the search list, keeping what was there.
+          existing=$(security list-keychains -d user | sed -e 's/^ *"//' -e 's/"$//')
+          # shellcheck disable=SC2086
+          security list-keychains -d user -s "$keychain" $existing
+
+          identity=$(security find-identity -v -p codesigning "$keychain" \
+            | sed -n 's/.*"\(Developer ID Application: .*\)"/\1/p' | head -1)
+          if [ -z "$identity" ]; then
+            echo "error: no Developer ID Application identity in the imported certificate" >&2
+            security find-identity -v -p codesigning "$keychain" >&2
+            exit 1
+          fi
+          echo "Signing identity: $identity"
+          echo "identity=$identity" >> "$GITHUB_OUTPUT"
+
+      - name: Build and sign WhatsMyUsage.app
+        env:
+          USAGE_BAR_SIGN_IDENTITY: ${{ steps.keychain.outputs.identity }}
+          # The runner is not a workstation; nothing here wants the CLI on PATH.
+          USAGE_BAR_SKIP_CLI_INSTALL: "1"
+        run: Scripts/make-app-bundle.sh release
+
+      - name: Check the signature before Apple does
+        run: |
+          set -euo pipefail
+          codesign --verify --strict --deep --verbose=2 .build/WhatsMyUsage.app
+          # Prove the two things notarisation actually insists on, instead of
+          # finding out from a rejection ten minutes later.
+          info=$(codesign -d --verbose=4 .build/WhatsMyUsage.app 2>&1)
+          echo "$info"
+          grep -q 'flags=.*runtime' <<<"$info" \
+            || { echo "error: hardened runtime missing" >&2; exit 1; }
+          grep -q '^Timestamp=' <<<"$info" \
+            || { echo "error: signature has no trusted timestamp" >&2; exit 1; }
+
+      # ditto, not zip: `zip` flattens symlinks and drops resource forks, and a
+      # bundle that survived the round trip is the whole point of the upload.
+      - name: Notarise and staple
+        env:
+          API_KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
+          API_ISSUER_ID: ${{ secrets.APPSTORE_API_ISSUER_ID }}
+          API_PRIVATE_KEY: ${{ secrets.APPSTORE_API_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          key_file="$RUNNER_TEMP/AuthKey.p8"
+          umask 077
+          printf '%s' "$API_PRIVATE_KEY" | base64 --decode > "$key_file"
+
+          ditto -c -k --keepParent .build/WhatsMyUsage.app "$RUNNER_TEMP/submit.zip"
+          xcrun notarytool submit "$RUNNER_TEMP/submit.zip" \
+            --key "$key_file" --key-id "$API_KEY_ID" --issuer "$API_ISSUER_ID" \
+            --wait --timeout 30m
+          rm -f "$key_file"
+
+          # Staple the ticket into the bundle so a first launch works offline.
+          xcrun stapler staple .build/WhatsMyUsage.app
+          xcrun stapler validate .build/WhatsMyUsage.app
+
+          # What Gatekeeper will say on the user's machine, asked here.
+          spctl --assess --type execute --verbose=4 .build/WhatsMyUsage.app
+
+          # Zip again: the first archive predates the ticket.
+          ditto -c -k --keepParent .build/WhatsMyUsage.app "$RUNNER_TEMP/WhatsMyUsage.zip"
+
+      # The asset name never carries the version, so
+      # /releases/latest/download/WhatsMyUsage.zip stays a working link forever.
+      # The site does not use it yet — it points at the source — but a versioned
+      # file name would rule that out before anyone tried.
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release upload "v$VERSION" "$RUNNER_TEMP/WhatsMyUsage.zip" --clobber
+          gh release edit "v$VERSION" --draft=false --latest
+          echo "Published v$VERSION with a notarised WhatsMyUsage.zip" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove the signing keychain
+        if: always()
+        env:
+          KEYCHAIN: ${{ steps.keychain.outputs.keychain }}
+        run: |
+          set -euo pipefail
+          [ -n "${KEYCHAIN:-}" ] || exit 0
+          security delete-keychain "$KEYCHAIN" || true

@@ -9,6 +9,9 @@
 # Sign with USAGE_BAR_SIGN_IDENTITY when set. Unset means ad-hoc (`-`): the
 # identity is the binary hash, so Keychain treats every rebuild as a new app.
 # See README for making a local code-signing certificate in two minutes.
+#
+# Releases set it to the Developer ID Application certificate, which is what
+# notarisation needs. Everything else about the bundle is the same either way.
 set -euo pipefail
 
 CONFIGURATION="${1:-release}"
@@ -128,7 +131,19 @@ PLIST
 
 SIGN_IDENTITY="${USAGE_BAR_SIGN_IDENTITY:--}"
 echo "==> Signing with identity: $SIGN_IDENTITY"
-codesign --force --sign "$SIGN_IDENTITY" --timestamp=none "$APP_PATH"
+# Hardened runtime always: notarisation rejects a bundle without it, and a
+# local build that skips it would not be the thing the release job ships.
+SIGN_ARGS=(--force --options runtime --sign "$SIGN_IDENTITY")
+if [[ "$SIGN_IDENTITY" == "-" ]]; then
+    # Apple's timestamp server has nothing to countersign for an ad-hoc
+    # signature; asking anyway fails the build.
+    SIGN_ARGS+=(--timestamp=none)
+else
+    # A real timestamp, not --timestamp=none: without it the signature dies
+    # with the certificate in 2031 instead of outliving it.
+    SIGN_ARGS+=(--timestamp)
+fi
+codesign "${SIGN_ARGS[@]}" "$APP_PATH"
 codesign --verify --verbose=2 "$APP_PATH"
 codesign -d -r- "$APP_PATH" 2>&1 | sed -n 's/^.*designated => /designated => /p'
 
@@ -138,10 +153,16 @@ codesign -d -r- "$APP_PATH" 2>&1 | sed -n 's/^.*designated => /designated => /p'
 # nothing in the app launches it, and a second product in MacOS/ is how
 # the last build overwrote the menu-bar binary on a case-insensitive volume.
 CLI_PATH="${HOME}/.local/bin"
-install_file "$CLI_BIN_PATH/whatsmyusage" "$CLI_PATH/whatsmyusage"
-chmod +x "$CLI_PATH/whatsmyusage"
+if [[ -n "${USAGE_BAR_SKIP_CLI_INSTALL:-}" ]]; then
+    echo "==> Skipping CLI install (USAGE_BAR_SKIP_CLI_INSTALL set)"
+else
+    install_file "$CLI_BIN_PATH/whatsmyusage" "$CLI_PATH/whatsmyusage"
+    chmod +x "$CLI_PATH/whatsmyusage"
+fi
 
 echo
 echo "Built $APP_PATH ($VERSION · $BUILD)"
-echo "CLI: $CLI_PATH/whatsmyusage"
+if [[ -z "${USAGE_BAR_SKIP_CLI_INSTALL:-}" ]]; then
+    echo "CLI: $CLI_PATH/whatsmyusage"
+fi
 echo "Run it with:  open \"$APP_PATH\""
