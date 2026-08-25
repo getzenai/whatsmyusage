@@ -6,13 +6,26 @@ feed the app polls.
 
 ## What the user sees
 
+- The automatic check starts **on** (`SUEnableAutomaticChecks` is `true` in the
+  bundle) and is silent. When it finds something, the popover grows one line
+  above the buttons — *Version 0.8.0 available* — and nothing else happens.
+- Clicking that line opens Sparkle's window: what changed, and Install.
 - Settings has a checkbox, **Check for updates automatically**, and a **Check
   now** button.
 - The app menu (visible while a window of ours is in front) has **Check for
   Updates…**.
-- The automatic check starts **off** (`SUEnableAutomaticChecks` is `false` in
-  the bundle). Sparkle would otherwise ask on the first launch with a modal,
-  and the first thing a new app says should not be about itself.
+
+The line is the whole notification. Sparkle's own window never opens by itself:
+`UpdateController` implements the standard user driver's gentle-reminder
+delegate and answers `standardUserDriverShouldHandleShowingScheduledUpdate`
+with `false`, which is what hands the telling to us. That is also why the
+background check can be on by default — it costs the user no interruption. It
+was off before, and off bought quiet by never updating anyone.
+
+`pendingVersion` is cleared as soon as the user has the update in front of them
+(`standardUserDriverDidReceiveUserAttention`) or the session ends
+(`standardUserDriverWillFinishUpdateSession`), so the line never outlives its
+news. Nothing is persisted: a restart re-learns it from the next check.
 
 ## Why Sparkle and not a hand-rolled check
 
@@ -127,3 +140,12 @@ key in it, ad-hoc signed. Launching it and pressing **Check now** exercises the
 whole path except the install: the feed is fetched and parsed, and an empty
 channel reports that the app is up to date. It cannot install anything, because
 an ad-hoc signature has no team identifier to match.
+
+The *background* path takes more setup, because Sparkle only runs it on its own
+schedule. Copy the bundle, give the copy its own `CFBundleIdentifier` and a
+version below the feed's, point `SUFeedURL` at a local server (add
+`NSAppTransportSecurity` / `NSAllowsArbitraryLoads` for plain HTTP), then write
+`SULastCheckTime` in that bundle's defaults far enough back that the check is
+overdue. Sparkle then fetches on launch. Success looks like a fetch in the
+server log and **no window** — the app has to stay windowless while the popover
+carries the line.

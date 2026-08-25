@@ -10,6 +10,8 @@ final class PopoverModel: ObservableObject {
     @Published var waits: [Achievements.CurrentWait] = []
     @Published var hasAchievements = false
     @Published var status: StatusDigest = .off
+    /// Set when a background check found a version nobody has looked at yet.
+    @Published var updateVersion: String?
 }
 
 /// What a click in the popover does. Held by the controller, not the view.
@@ -18,6 +20,7 @@ struct PopoverActions {
     var refresh: () -> Void
     var openSettings: () -> Void
     var openAchievements: () -> Void
+    var openUpdate: () -> Void
     var quit: () -> Void
 }
 
@@ -50,6 +53,11 @@ struct UsagePopoverView: View {
                 StatusLineView(line: line, entries: model.status.entries)
             }
 
+            if let version = model.updateVersion {
+                Divider().opacity(0.35)
+                UpdateLineView(version: version, action: actions.openUpdate)
+            }
+
             Divider().opacity(0.35)
             HStack(spacing: 12) {
                 Button("Refresh", action: actions.refresh)
@@ -76,6 +84,33 @@ struct UsagePopoverView: View {
         }
         .frame(width: 360)
         .background(.background)
+    }
+}
+
+/// A found update, as one line above the buttons. It is deliberately not a
+/// window: the check happens on a schedule nobody asked about, so the news
+/// waits in the place the user already opens rather than interrupting them.
+/// The click hands over to Sparkle, which owns everything after it.
+private struct UpdateLineView: View {
+    let version: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: "arrow.down.circle.fill")
+                    .font(.system(size: 11))
+                Text("Version \(version) available")
+                    .font(.system(size: 11))
+                Spacer(minLength: 0)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Color.accentColor)
+        .help("Show what changed and install")
+        .padding(.horizontal, 14)
+        .padding(.vertical, 7)
     }
 }
 
