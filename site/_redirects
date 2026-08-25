@@ -4,3 +4,5 @@
 /appcast.xml  https://github.com/getzenai/whatsmyusage/releases/latest/download/appcast.xml  302
 
 https://www.whatsmyusage.com/* https://whatsmyusage.com/:splat 301
+
+/download  https://github.com/getzenai/whatsmyusage/releases/latest/download/WhatsMyUsage.zip  302
