@@ -245,8 +245,14 @@ struct AchievementsTests {
         let list = Achievements.evaluate(series: [], observedDays: [], calendar: utc)
         #expect(list.count == Achievements.Kind.allCases.count)
         #expect(list.allSatisfy { !$0.isEarned })
-        // A locked badge says what it takes instead of showing a blank.
+        // The rule lives on `requirement`. `detail` is the state, never a copy
+        // of the rule, so the window can show both without repeating.
         #expect(list.allSatisfy { !$0.detail.isEmpty })
+        #expect(list.allSatisfy { !$0.requirement.isEmpty })
+        #expect(list.allSatisfy { $0.detail != $0.requirement })
+        #expect(earned(list, .regular).detail == "0 of 10 so far.")
+        #expect(earned(list, .firstMaxOut).detail == "Not yet.")
+        #expect(earned(list, .patience).detail == "0m waiting in all.")
     }
 
     @Test func currentWaitsAreOnlyTheLimitsStillFullLongestFirst() {
@@ -503,6 +509,7 @@ struct AchievementsTests {
             reading(hours: 48, 0.0),
         ]]
         #expect(!earned(evaluate(fortySeven), .lostWeekend).isEarned)
+        #expect(earned(evaluate(fortySeven), .lostWeekend).detail == "1d 23h waiting on Week.")
     }
 
     @Test func patienceSumsFinishedWaitsToSevenDays() {
@@ -521,6 +528,7 @@ struct AchievementsTests {
             reading(hours: 1 + 6 * 24 + 23, 0.0),
         ]]
         #expect(!earned(evaluate(shy), .patience).isEarned)
+        #expect(earned(evaluate(shy), .patience).detail == "6d 23h waiting in all.")
     }
 
     @Test func sprintIsEmptyToFullInsideAnHour() {
@@ -875,6 +883,8 @@ struct AchievementsTests {
 
         let shy = [[reading(hours: 0, 0.1), reading(hours: 89 * 24, 0.2)]]
         #expect(!earned(evaluate(shy), .oldTimer).isEarned)
+        #expect(earned(evaluate(shy), .oldTimer).detail.hasPrefix("Log stretches 89d"))
+        #expect(earned(evaluate(shy), .oldTimer).detail != Achievements.Kind.oldTimer.requirement)
     }
 
     @Test func theAnswerTracksEveryOtherKind() {

@@ -281,6 +281,19 @@ struct UsageQueryTests {
         #expect(object["resetsAt"] is String)
         #expect(object["observedAt"] is String)
     }
+
+    @Test func achievementsJSONCarriesTheRuleNextToTheState() throws {
+        let list = Achievements.evaluate(series: [], observedDays: [], calendar: Calendar(identifier: .gregorian))
+        let object = try JSONSerialization.jsonObject(with: try UsageQuery.achievementsJSON(list, observedAt: origin))
+            as! [String: Any]
+        let items = object["achievements"] as! [[String: Any]]
+        let first = items.first { $0["kind"] as? String == "firstMaxOut" }!
+        #expect(first["title"] as? String == "Maxed out")
+        #expect(first["requirement"] as? String == Achievements.Kind.firstMaxOut.requirement)
+        #expect(first["detail"] as? String == "Not yet.")
+        #expect(first["detail"] as? String != first["requirement"] as? String)
+        #expect(first["earnedAt"] is NSNull)
+    }
 }
 
 @Suite("UsageLog CLI seams")
