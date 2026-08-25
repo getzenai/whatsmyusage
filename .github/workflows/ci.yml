@@ -71,3 +71,14 @@ jobs:
           /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" -c "Print :CFBundleVersion" \
             .build/WhatsMyUsage.app/Contents/Info.plist
           codesign --verify --verbose=2 .build/WhatsMyUsage.app
+
+      # Same reason as the step above: the release job is the only other place
+      # this script runs, and there a failure means a tagged version with no
+      # download. Unsigned here — the script checks the image it built and
+      # fails on its own if the window would come out blank.
+      - name: Build the disk image
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/dmgvenv"
+          "$RUNNER_TEMP/dmgvenv/bin/pip" install --quiet dmgbuild==1.6.5 pillow==11.3.0
+          PATH="$RUNNER_TEMP/dmgvenv/bin:$PATH" Scripts/make-dmg.sh

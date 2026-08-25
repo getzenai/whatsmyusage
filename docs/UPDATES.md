@@ -63,12 +63,35 @@ exists because the one before it is not enough:
    XPC services) get the same treatment, because notarisation looks at every
    executable in the bundle and not only the outermost one.
 2. Notarise, staple the ticket, ask `spctl` what Gatekeeper will say.
-3. Publish the release with the stapled zip attached.
-4. Sign that zip with the EdDSA key (`sign_update`, key on stdin), build the
+3. Wrap the stapled bundle in `WhatsMyUsage.dmg` (`Scripts/make-dmg.sh`), sign
+   and notarise the image too — Gatekeeper checks the container as well as what
+   is inside it.
+4. Publish the release with both assets attached.
+5. Sign the *zip* with the EdDSA key (`sign_update`, key on stdin), build the
    feed from `Scripts/appcast-template.xml` with `Scripts/appcast.py`, and
    attach it to the same release as `appcast.xml`.
 
-The order matters at step 3/4: the feed goes in after the asset is downloadable.
+Building the image needs two Python packages that are not part of the
+toolchain: `pip install dmgbuild pillow`, then `Scripts/make-dmg.sh`. The CI
+job makes a throwaway virtualenv for them.
+
+### Two assets, one build
+
+The `.dmg` is the install format and the `.zip` is the update format, and they
+hold the same bundle.
+
+A disk image opens into a window with the app and an Applications alias side by
+side, which is what a person expects to download and what makes the move into
+*Applications* obvious. That move is not decoration: an app left in `~/Downloads`
+runs from a read-only random path (App Translocation) and Sparkle refuses to
+replace it — `SURunningTranslocated`, or `SURunningFromDiskImageError` when it
+was started off the mounted image.
+
+Sparkle installs the zip instead. It downloads in the background with no window
+to mount, and only the zip is signed with the EdDSA key: the feed points at one
+archive, so there is one thing to sign and one thing that can be checked.
+
+The order matters at step 4/5: the feed goes in after the asset is downloadable.
 A feed that points at nothing turns every user's check into an error.
 
 ### Why the feed is a release asset and not a file in the repo
