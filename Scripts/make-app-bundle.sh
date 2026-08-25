@@ -141,11 +141,12 @@ cat > "$APP_PATH/Contents/Info.plist" <<PLIST
     <string>$FEED_URL</string>
     <key>SUPublicEDKey</key>
     <string>$PUBLIC_ED_KEY</string>
-    <!-- The background check starts off. Without this Sparkle asks the user on
-         the first launch, and a modal about updates is not the first thing a
-         new app should say. Settings has the switch. -->
+    <!-- The background check starts on. It costs the user nothing: a found
+         update becomes one line in the popover, never a window that opens by
+         itself (see UpdateController). Off by default was the old answer to
+         that window, and it bought quiet by never updating anyone. -->
     <key>SUEnableAutomaticChecks</key>
-    <false/>
+    <true/>
 </dict>
 </plist>
 PLIST

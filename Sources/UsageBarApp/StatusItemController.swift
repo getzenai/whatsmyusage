@@ -12,6 +12,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     var onRefresh: (() -> Void)?
     var onOpenSettings: (() -> Void)?
     var onQuit: (() -> Void)?
+    var onOpenUpdate: (() -> Void)?
     var onRename: ((String, String) -> Void)?
     /// Asked for on every popover open, so the badges are as fresh as the log.
     var historyProvider: (() -> PopoverHistory)?
@@ -22,6 +23,14 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     private var lastError: String?
     private var cards: [AccountCard] = []
     private var status: StatusDigest = .off
+    /// The version a background check found, or nil. Pushed in rather than read
+    /// from the updater: the popover stays a view over what it was handed.
+    var updateVersion: String? {
+        didSet {
+            guard updateVersion != oldValue else { return }
+            if popover.isShown { refreshPopoverData() }
+        }
+    }
 
     override init() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -128,6 +137,10 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
                     self.popover.performClose(nil)
                     self.achievementsWindow.show(self.history.achievements)
                 },
+                openUpdate: { [weak self] in
+                    self?.popover.performClose(nil)
+                    self?.onOpenUpdate?()
+                },
                 quit: { [weak self] in self?.onQuit?() }
             )
         )
@@ -149,6 +162,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         model.waits = history.waits
         model.hasAchievements = !history.achievements.isEmpty
         model.status = status
+        model.updateVersion = updateVersion
     }
 
     func openPopover() {

@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import UsageBarCore
 
 @MainActor
@@ -11,6 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var inflight: Task<Void, Never>?
     private var statusInflight: Task<Void, Never>?
     private let usageLog = UsageLogWriter()
+    private var updateObserver: AnyCancellable?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         DefaultsMigration.run()
@@ -22,6 +24,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.onRefresh = { [weak self] in self?.refresh() }
         controller.onOpenSettings = { [weak self] in self?.settings.show() }
         controller.onQuit = { NSApp.terminate(nil) }
+        controller.onOpenUpdate = { UpdateController.shared.checkForUpdates() }
+        // The background check finds an update at a moment of its own choosing.
+        // This is the whole path from there to the user: one line in the popover.
+        updateObserver = UpdateController.shared.$pendingVersion
+            .receive(on: RunLoop.main)
+            .sink { [weak controller] version in controller?.updateVersion = version }
         controller.historyProvider = { [weak self] in self?.usageLog.history() ?? .none }
         controller.pillStyle = DisplayStore.load().pill
         controller.onRename = { [weak controller] id, name in
