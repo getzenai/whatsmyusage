@@ -91,14 +91,29 @@ private struct AchievementRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(achievement.title)
                     .font(.system(size: 13, weight: achievement.isEarned ? .medium : .regular))
-                // Locked badges show what it takes; earned ones show the measured fact.
-                Text(achievement.detail)
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                // Earned: the fact first, then the rule. Locked: the rule first,
+                // then progress. The rule is always there.
+                if achievement.isEarned {
+                    caption(achievement.detail, prominent: true)
+                    if achievement.detail != achievement.requirement {
+                        caption(achievement.requirement, prominent: false)
+                    }
+                } else {
+                    caption(achievement.requirement, prominent: true)
+                    if achievement.detail != achievement.requirement {
+                        caption(achievement.detail, prominent: false)
+                    }
+                }
             }
             Spacer(minLength: 8)
         }
         .foregroundStyle(achievement.isEarned ? .primary : .secondary)
+    }
+
+    private func caption(_ text: String, prominent: Bool) -> some View {
+        Text(text)
+            .font(.system(size: 11))
+            .foregroundStyle(prominent ? .secondary : .tertiary)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }

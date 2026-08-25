@@ -238,6 +238,7 @@ public enum UsageQuery {
                     "kind": item.kind.rawValue,
                     "title": item.title,
                     "earnedAt": item.earnedAt.map(iso8601) ?? NSNull(),
+                    "requirement": item.requirement,
                     "detail": item.detail,
                 ]
             },

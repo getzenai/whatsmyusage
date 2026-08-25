@@ -213,8 +213,8 @@ public enum Achievements {
             }
         }
 
-        /// What it takes — shown while it is still locked, so the list is a goal and
-        /// not a riddle.
+        /// What it takes. Every row shows this, earned or locked — `detail` is only
+        /// the measured state, never this sentence.
         public var requirement: String {
             switch self {
             case .firstMaxOut: "Run one limit all the way to full."
@@ -267,12 +267,14 @@ public enum Achievements {
         public let kind: Kind
         /// Nil while it is still locked.
         public let earnedAt: Date?
-        /// The measured fact behind it, or what is still missing.
+        /// The measured fact, or the progress still short of it. Never the rule —
+        /// that lives on `kind.requirement`.
         public let detail: String
 
         public var id: String { kind.rawValue }
         public var isEarned: Bool { earnedAt != nil }
         public var title: String { kind.title }
+        public var requirement: String { kind.requirement }
     }
 
     /// What the popover shows live, next to the badges: the reset you are waiting on.
@@ -415,10 +417,7 @@ public enum Achievements {
             }
         }
         guard let best, best.count >= needed else {
-            if let best, best.count > 0 {
-                return Achievement(kind: kind, earnedAt: nil, detail: "\(best.count) of \(needed) so far.")
-            }
-            return locked(kind)
+            return Achievement(kind: kind, earnedAt: nil, detail: "\(best?.count ?? 0) of \(needed) so far.")
         }
         return Achievement(
             kind: kind,
@@ -446,10 +445,7 @@ public enum Achievements {
             }
         }
         guard let best, best.count >= needed else {
-            if let best, best.count > 0 {
-                return Achievement(kind: kind, earnedAt: nil, detail: "\(best.count) of \(needed) so far.")
-            }
-            return locked(kind)
+            return Achievement(kind: kind, earnedAt: nil, detail: "\(best?.count ?? 0) of \(needed) so far.")
         }
         return Achievement(
             kind: kind,
@@ -460,7 +456,7 @@ public enum Achievements {
 
     private static func waitOfAtLeast(_ runs: [FullRun], _ seconds: TimeInterval, kind: Kind) -> Achievement {
         let completed = runs.compactMap { run -> (FullRun, TimeInterval)? in
-            guard let duration = run.completedDuration, duration >= seconds else { return nil }
+            guard let duration = run.completedDuration else { return nil }
             return (run, duration)
         }
         guard let (run, duration) = completed.max(by: { $0.1 < $1.1 }) else {
@@ -468,7 +464,7 @@ public enum Achievements {
         }
         return Achievement(
             kind: kind,
-            earnedAt: run.end,
+            earnedAt: duration >= seconds ? run.end : nil,
             detail: "\(duration.hoursAndMinutes) waiting on \(run.label)."
         )
     }
@@ -490,14 +486,11 @@ public enum Achievements {
             }
         }
         guard let best, best.providers.count >= needed else {
-            if let best, best.providers.count > 0 {
-                return Achievement(
-                    kind: kind,
-                    earnedAt: nil,
-                    detail: "\(best.providers.count) of \(needed) so far."
-                )
-            }
-            return locked(kind)
+            return Achievement(
+                kind: kind,
+                earnedAt: nil,
+                detail: "\(best?.providers.count ?? 0) of \(needed) so far."
+            )
         }
         return Achievement(
             kind: kind,
@@ -537,10 +530,7 @@ public enum Achievements {
             }
         }
         guard let best, best.count >= needed else {
-            if let best, best.count > 0 {
-                return Achievement(kind: kind, earnedAt: nil, detail: "\(best.count) of \(needed) so far.")
-            }
-            return locked(kind)
+            return Achievement(kind: kind, earnedAt: nil, detail: "\(best?.count ?? 0) of \(needed) so far.")
         }
         return Achievement(
             kind: kind,
@@ -584,7 +574,11 @@ public enum Achievements {
                 )
             }
         }
-        return locked(.patience)
+        return Achievement(
+            kind: .patience,
+            earnedAt: nil,
+            detail: "\(total.hoursAndMinutes) waiting in all."
+        )
     }
 
     private static func overlapStart(_ left: FullRun, _ right: FullRun) -> Date? {
@@ -763,14 +757,11 @@ public enum Achievements {
             }
         }
         guard let best, best.count >= 4 else {
-            if let best, best.count > 0 {
-                return Achievement(
-                    kind: .roundTheClock,
-                    earnedAt: nil,
-                    detail: "\(best.count) of 4 quarters so far."
-                )
-            }
-            return locked(.roundTheClock)
+            return Achievement(
+                kind: .roundTheClock,
+                earnedAt: nil,
+                detail: "\(best?.count ?? 0) of 4 quarters so far."
+            )
         }
         return Achievement(
             kind: .roundTheClock,
@@ -926,10 +917,7 @@ public enum Achievements {
             }
         }
         guard let best, best.count >= needed else {
-            if let best, best.count > 0 {
-                return Achievement(kind: kind, earnedAt: nil, detail: "\(best.count) of \(needed) so far.")
-            }
-            return locked(kind)
+            return Achievement(kind: kind, earnedAt: nil, detail: "\(best?.count ?? 0) of \(needed) so far.")
         }
         let noun: String
         switch kind {
@@ -1120,10 +1108,9 @@ public enum Achievements {
             return locked(.oldTimer)
         }
         let span = last.observedAt.timeIntervalSince(first.observedAt)
-        guard span >= 90 * 86_400 else { return locked(.oldTimer) }
         return Achievement(
             kind: .oldTimer,
-            earnedAt: last.observedAt,
+            earnedAt: span >= 90 * 86_400 ? last.observedAt : nil,
             detail: "Log stretches \(span.hoursAndMinutes) from \(Self.day(first.observedAt))."
         )
     }
@@ -1178,7 +1165,7 @@ public enum Achievements {
     }
 
     private static func locked(_ kind: Kind) -> Achievement {
-        Achievement(kind: kind, earnedAt: nil, detail: kind.requirement)
+        Achievement(kind: kind, earnedAt: nil, detail: "Not yet.")
     }
 
     // MARK: - Formatting

@@ -136,6 +136,19 @@ enum WhatsMyUsageCLI {
         for item in list {
             let mark = item.isEarned ? "earned" : "locked"
             lines.append("\(mark)  \(item.title)")
+            // Same two lines as the window: the rule always, plus the state.
+            // JSON keeps `detail` as the state and adds `requirement` next to it.
+            if item.isEarned {
+                lines.append("        \(item.detail)")
+                if item.detail != item.requirement {
+                    lines.append("        \(item.requirement)")
+                }
+            } else {
+                lines.append("        \(item.requirement)")
+                if item.detail != item.requirement {
+                    lines.append("        \(item.detail)")
+                }
+            }
         }
         return lines.joined(separator: "\n")
     }
