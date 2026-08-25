@@ -24,10 +24,26 @@ let package = Package(
         // Tools. Without this, `swift test` fails with "no such module 'Testing'"
         // (or a missing `_TestingInternals`) on a machine that has no Xcode.
         .package(url: "https://github.com/swiftlang/swift-testing.git", from: "0.10.0"),
+        // In-app updates for a signed build downloaded from the site. Only the
+        // app target links it; UsageBarCore and the CLI stay free of it.
+        .package(url: "https://github.com/sparkle-project/Sparkle.git", from: "2.6.0"),
     ],
     targets: [
         .target(name: "UsageBarCore"),
-        .executableTarget(name: "UsageBarApp", dependencies: ["UsageBarCore"]),
+        .executableTarget(
+            name: "UsageBarApp",
+            dependencies: [
+                "UsageBarCore",
+                .product(name: "Sparkle", package: "Sparkle"),
+            ],
+            linkerSettings: [
+                // SwiftPM links Sparkle.framework but never embeds it: there is
+                // no Xcode "Copy Files" phase here. Scripts/make-app-bundle.sh
+                // copies it into Contents/Frameworks, and this is the rpath that
+                // makes the launched app find it there.
+                .unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"])
+            ]
+        ),
         .executableTarget(name: "WhatsMyUsageCLI", dependencies: ["UsageBarCore"]),
         .testTarget(
             name: "UsageBarCoreTests",

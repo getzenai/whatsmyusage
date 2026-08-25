@@ -15,6 +15,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         DefaultsMigration.run()
         installEditMenu()
+        // Constructed at launch, not on first use: the scheduled background
+        // check only exists while the updater does.
+        _ = UpdateController.shared
         let controller = StatusItemController()
         controller.onRefresh = { [weak self] in self?.refresh() }
         controller.onOpenSettings = { [weak self] in self?.settings.show() }
@@ -59,6 +62,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let appItem = NSMenuItem()
         main.addItem(appItem)
         let appMenu = NSMenu()
+        appMenu.addItem(withTitle: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "")
+        appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
         appMenu.addItem(withTitle: "Quit \(AppIdentity.displayName)", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appItem.submenu = appMenu
@@ -83,6 +88,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func openSettings() {
         settings.show()
+    }
+
+    @objc private func checkForUpdates() {
+        UpdateController.shared.checkForUpdates()
     }
 
     /// The status pages are read next to the numbers, not after them: they

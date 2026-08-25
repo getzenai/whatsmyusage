@@ -537,6 +537,7 @@ struct OnboardingRoot: View {
             }
             pillPicker
             loginItemPicker
+            UpdatesSection()
             StatusTrackingSection(model: model, actions: actions)
             Spacer(minLength: 0)
         }
@@ -947,6 +948,34 @@ private struct CookieEditor: NSViewRepresentable {
 /// The four pages are always visible: hiding them behind a link traded "does
 /// not get in the way" for "cannot be found", and the second one lost. Only the
 /// services under a page fold away — those are a long list nobody edits twice.
+/// Updates. The check itself is Sparkle's; this is the switch and the button.
+/// Both sit here rather than in the popover: the popover is the numbers, and a
+/// thing you touch twice a year does not belong next to them.
+private struct UpdatesSection: View {
+    @ObservedObject private var updates = UpdateController.shared
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Toggle(isOn: $updates.checksAutomatically) {
+                Text("Check for updates automatically")
+                    .font(.system(size: 13))
+            }
+            .toggleStyle(.checkbox)
+            HStack(spacing: 8) {
+                Button("Check now") { updates.checkForUpdates() }
+                    .disabled(!updates.canCheck)
+                // Without a feed there is nothing to check, and a button that
+                // silently does nothing is worse than one that says why.
+                if updates.feedURL == nil {
+                    Text("This build has no update feed — updates only work in a release build.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+}
+
 private struct StatusTrackingSection: View {
     let model: OnboardingModel
     let actions: OnboardingActions
