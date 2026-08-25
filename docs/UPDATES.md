@@ -36,7 +36,8 @@ three things around it are not:
 | EdDSA public key (`SUPublicEDKey`) | `Scripts/make-app-bundle.sh`, written into the bundle |
 | EdDSA private key | The maintainer's login Keychain, item *Private key for signing Sparkle updates* |
 | Feed URL (`SUFeedURL`) | `Scripts/make-app-bundle.sh` → `https://whatsmyusage.com/appcast.xml` |
-| The feed itself | `site/appcast.xml`, deployed with the rest of the site |
+| The feed itself | `appcast.xml`, attached to the newest GitHub release; `site/_redirects` points the feed URL at it |
+| The empty skeleton | `Scripts/appcast-template.xml` |
 | EdDSA private key, for the release job | repo secret `SPARKLE_PRIVATE_KEY` |
 
 The private key was generated with Sparkle's `generate_keys` and lives in the
@@ -63,14 +64,30 @@ exists because the one before it is not enough:
    executable in the bundle and not only the outermost one.
 2. Notarise, staple the ticket, ask `spctl` what Gatekeeper will say.
 3. Publish the release with the stapled zip attached.
-4. Sign that zip with the EdDSA key (`sign_update`, key on stdin) and write the
-   `<item>` into `site/appcast.xml` with `Scripts/appcast.py`.
-5. Commit the feed to `main` and start the site deploy **by name**: a push made
-   with `GITHUB_TOKEN` does not trigger another workflow, so `on: push` would
-   never fire and the feed would sit in the repo, unpublished.
+4. Sign that zip with the EdDSA key (`sign_update`, key on stdin), build the
+   feed from `Scripts/appcast-template.xml` with `Scripts/appcast.py`, and
+   attach it to the same release as `appcast.xml`.
 
 The order matters at step 3/4: the feed goes in after the asset is downloadable.
 A feed that points at nothing turns every user's check into an error.
+
+### Why the feed is a release asset and not a file in the repo
+
+It was a file in `site/`, and the first release showed why that cannot work:
+the entry can only be written after Apple has notarised the build, and by then
+the job has to push it to `main` — which branch protection refuses, correctly.
+Weakening the protection to let a job past it is a worse trade than moving the
+file.
+
+So the release carries its own feed, and `site/_redirects` sends
+`https://whatsmyusage.com/appcast.xml` — the URL baked into every bundle we
+have ever shipped — to
+`https://github.com/getzenai/whatsmyusage/releases/latest/download/appcast.xml`.
+`latest` follows the newest published release on its own, so nothing has to be
+updated when we ship.
+
+Each feed holds one item, the release it is attached to. Sparkle offers the
+highest version it finds, so older items would be history and nothing else.
 
 ### Why CFBundleVersion is the tag and not the commit
 
