@@ -19,6 +19,9 @@ struct PopoverActions {
     var rename: (String, String) -> Void
     var refresh: () -> Void
     var openSettings: () -> Void
+    /// Straight to the paste step: an expired sign-in is fixed by a fresh cookie,
+    /// and nothing else on the settings window is about that.
+    var openCookies: () -> Void
     var openAchievements: () -> Void
     var openUpdate: () -> Void
     var quit: () -> Void
@@ -43,7 +46,8 @@ struct UsagePopoverView: View {
                         card: card,
                         waits: model.waits,
                         disruption: model.status.banner(for: card.provider),
-                        onRename: actions.rename
+                        onRename: actions.rename,
+                        onFixSignIn: actions.openCookies
                     )
                 }
             }
@@ -222,6 +226,7 @@ private struct AccountCardView: View {
     let waits: [Achievements.CurrentWait]
     var disruption: StatusDigest.Entry?
     var onRename: (String, String) -> Void
+    var onFixSignIn: () -> Void
 
     @State private var editing = false
     @State private var draft = ""
@@ -261,9 +266,29 @@ private struct AccountCardView: View {
             }
 
             if let message = card.message {
-                Text(message)
-                    .font(.system(size: 12))
-                    .foregroundStyle(.primary)
+                // An expired sign-in is the one message with a next step, so it
+                // is the one that is a button. Everything else states a fact
+                // pasting a cookie does not change.
+                if card.tone == .expired {
+                    Button(action: onFixSignIn) {
+                        HStack(spacing: 6) {
+                            Text(message)
+                                .font(.system(size: 12))
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 9, weight: .semibold))
+                            Spacer(minLength: 0)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color.accentColor)
+                    .help("Paste a fresh cookie for \(card.provider.displayName)")
+                    .accessibilityLabel("\(message). Open settings to paste a fresh cookie.")
+                } else {
+                    Text(message)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.primary)
+                }
             }
 
             ForEach(card.limits) { limit in
