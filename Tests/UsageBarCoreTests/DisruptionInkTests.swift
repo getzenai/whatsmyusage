@@ -4,8 +4,8 @@ import Testing
 
 /// The six slot fills, measured from `NSColor.system*` under Aqua and Dark Aqua
 /// on macOS 26.5, 2026-08-24. Channels are the sRGB values AppKit returned,
-/// not the rounded hex. `error` is `systemRed` at alpha 0.7; the RGB is the
-/// same as `blocked` and the ink reads the source colour, not the composite.
+/// not the rounded hex. `error` is `systemGray` at alpha 0.5; the RGB is the
+/// same as `idle` and the ink reads the source colour, not the composite.
 private struct SlotFill: Sendable {
     let tone: String
     let appearance: String
@@ -21,8 +21,8 @@ private let slotFills: [SlotFill] = [
     .init(tone: "critical", appearance: "dark", fill: SRGBColor(red: 1.0000, green: 0.5725, blue: 0.1882)),
     .init(tone: "blocked", appearance: "light", fill: SRGBColor(red: 1.0000, green: 0.2196, blue: 0.2353)),
     .init(tone: "blocked", appearance: "dark", fill: SRGBColor(red: 1.0000, green: 0.2588, blue: 0.2706)),
-    .init(tone: "error", appearance: "light", fill: SRGBColor(red: 1.0000, green: 0.2196, blue: 0.2353)),
-    .init(tone: "error", appearance: "dark", fill: SRGBColor(red: 1.0000, green: 0.2588, blue: 0.2706)),
+    .init(tone: "error", appearance: "light", fill: SRGBColor(red: 0.5569, green: 0.5569, blue: 0.5765)),
+    .init(tone: "error", appearance: "dark", fill: SRGBColor(red: 0.5961, green: 0.5961, blue: 0.6157)),
     .init(tone: "idle", appearance: "light", fill: SRGBColor(red: 0.5569, green: 0.5569, blue: 0.5765)),
     .init(tone: "idle", appearance: "dark", fill: SRGBColor(red: 0.5961, green: 0.5961, blue: 0.6157)),
 ]
