@@ -91,18 +91,11 @@ private struct AchievementRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(achievement.title)
                     .font(.system(size: 13, weight: achievement.isEarned ? .medium : .regular))
-                // Earned: the fact first, then the rule. Locked: the rule first,
-                // then progress. The rule is always there.
-                if achievement.isEarned {
-                    caption(achievement.detail, prominent: true)
-                    if achievement.detail != achievement.requirement {
-                        caption(achievement.requirement, prominent: false)
-                    }
-                } else {
-                    caption(achievement.requirement, prominent: true)
-                    if achievement.detail != achievement.requirement {
-                        caption(achievement.detail, prominent: false)
-                    }
+                // Always the rule, then where you stand. Earned and locked
+                // share the order; the seal and the weight mark "done".
+                caption(achievement.requirement, prominent: true)
+                if achievement.detail != achievement.requirement {
+                    caption(achievement.detail, prominent: false)
                 }
             }
             Spacer(minLength: 8)
