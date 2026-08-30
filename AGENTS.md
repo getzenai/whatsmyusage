@@ -82,6 +82,9 @@ type(scope)!: subject         feat(log)!: rekey the series   (breaking)
 | `refactor`, `docs`, `test`, `build`, `ci`, `chore`, `style` | none |
 | any type with `!`, or a `BREAKING CHANGE:` footer | major |
 
+- **A merge does not release.** The release job is started by hand — Actions →
+  Release → Run workflow, or `gh workflow run release.yml`. Merge as often as
+  you like; whatever has piled up since the last tag becomes one version.
 - **Git tags are the version.** No VERSION file, nothing to keep in sync.
   `Scripts/make-app-bundle.sh` and the release job both read the latest tag.
 - **Below 1.0.0 a breaking change bumps the minor**, not the major — a first
