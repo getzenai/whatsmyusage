@@ -241,7 +241,8 @@ enum PillImage {
         case .warning: return .systemYellow
         case .critical: return .systemOrange
         case .blocked: return .systemRed
-        case .error: return .systemRed.withAlphaComponent(0.7)
+        // Unknown, not full. Red is the wall; fade the same grey as idle.
+        case .error: return .systemGray.withAlphaComponent(0.5)
         case .idle, .expired: return .systemGray
         }
     }
