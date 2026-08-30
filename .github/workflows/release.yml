@@ -1,6 +1,6 @@
 name: Release
 
-# Every squash onto main is one Conventional Commit. This reads the commits
+# Every squash onto main is one Conventional Commit. This reads every commit
 # since the last tag, decides patch / minor / major, and tags. Nothing is
 # released when the batch is only docs, chore, ci, test, build or refactor —
 # a version bump is a promise about behaviour.
@@ -15,9 +15,12 @@ name: Release
 # build Gatekeeper would refuse. If notarisation fails the draft stays, the tag
 # stays, and nobody downloads anything.
 
+# Started by hand, never by a merge. A push trigger tags each squash on its
+# own, so three PRs merged in one minute shipped three versions where one was
+# meant — and every one of them builds, notarises and lands on the update feed.
+# The version is still read from the commit titles since the last tag; only the
+# moment is ours: Actions → Release → Run workflow, or `gh workflow run release.yml`.
 on:
-  push:
-    branches: [main]
   workflow_dispatch: {}
 
 jobs:
