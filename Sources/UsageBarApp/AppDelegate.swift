@@ -23,6 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let controller = StatusItemController()
         controller.onRefresh = { [weak self] in self?.refresh() }
         controller.onOpenSettings = { [weak self] in self?.settings.show() }
+        controller.onOpenCookies = { [weak self] in self?.settings.show(startingAt: .paste) }
         controller.onQuit = { NSApp.terminate(nil) }
         controller.onOpenUpdate = { UpdateController.shared.checkForUpdates() }
         // The background check finds an update at a moment of its own choosing.

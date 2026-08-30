@@ -481,6 +481,7 @@ struct OnboardingRoot: View {
                 .foregroundStyle(.primary)
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
+            providerLinks
             CookieEditor(text: $model.pasteText)
                 .frame(maxWidth: .infinity, minHeight: 160, maxHeight: .infinity)
             if let success = model.success {
@@ -546,6 +547,29 @@ struct OnboardingRoot: View {
             Button("Cancel", role: .cancel, action: actions.cancelDelete)
         } message: {
             Text(model.pendingDeleteMessage)
+        }
+    }
+
+    /// The way back to the provider: to sign in again when the cookie died, and
+    /// to check its own usage page against the numbers in the bar.
+    private var providerLinks: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Usage at the provider")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.primary)
+            ForEach(Provider.allCases, id: \.rawValue) { provider in
+                HStack(spacing: 6) {
+                    Link(destination: provider.usageURL) {
+                        Text(provider.displayName)
+                            .font(.system(size: 12, weight: .medium))
+                    }
+                    if let hint = provider.usageHint {
+                        Text(hint)
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
         }
     }
 

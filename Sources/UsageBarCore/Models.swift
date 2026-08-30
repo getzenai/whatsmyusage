@@ -12,6 +12,28 @@ public enum Provider: String, Sendable, CaseIterable {
         case .grok: "Grok"
         }
     }
+
+    /// Where the provider shows its own numbers. Claude has a documented path
+    /// for it; for the other two the page sits behind the account menu with no
+    /// address we can stand behind, so the link is the site. One click more
+    /// beats a link that 404s.
+    public var usageURL: URL {
+        switch self {
+        case .claude: URL(string: "https://claude.ai/settings/usage")!
+        case .chatGPT: URL(string: "https://chatgpt.com")!
+        case .grok: URL(string: "https://grok.com")!
+        }
+    }
+
+    /// The rest of the way, for the two we cannot link straight to. Nil means
+    /// the link lands on the page itself.
+    public var usageHint: String? {
+        switch self {
+        case .claude: nil
+        case .chatGPT: "account menu"
+        case .grok: "Settings → Usage"
+        }
+    }
 }
 
 /// Whether the provider says work is currently blocked.

@@ -11,6 +11,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     private let achievementsWindow = AchievementsWindowController()
     var onRefresh: (() -> Void)?
     var onOpenSettings: (() -> Void)?
+    var onOpenCookies: (() -> Void)?
     var onQuit: (() -> Void)?
     var onOpenUpdate: (() -> Void)?
     var onRename: ((String, String) -> Void)?
@@ -131,6 +132,10 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
                 openSettings: { [weak self] in
                     self?.popover.performClose(nil)
                     self?.onOpenSettings?()
+                },
+                openCookies: { [weak self] in
+                    self?.popover.performClose(nil)
+                    self?.onOpenCookies?()
                 },
                 openAchievements: { [weak self] in
                     guard let self else { return }
