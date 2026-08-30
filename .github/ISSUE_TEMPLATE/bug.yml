@@ -1,0 +1,36 @@
+name: A number is wrong
+description: The bar shows something the provider's own page does not.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before anything else: **no session cookies, no org UUIDs, no e-mail addresses,
+        no real usage numbers from your account.** See SECURITY.md. Redact, then post.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The version in the menu, e.g. v1.4.0.
+    validations:
+      required: true
+  - type: dropdown
+    id: provider
+    attributes:
+      label: Provider
+      options: [Claude, ChatGPT, Grok, more than one]
+    validations:
+      required: true
+  - type: textarea
+    id: shown
+    attributes:
+      label: What the app shows, and what the provider's page shows
+      description: Both numbers, and where you read the second one.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to get there
+    validations:
+      required: true

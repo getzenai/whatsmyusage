@@ -1,0 +1,23 @@
+name: An idea
+description: Something the app should do that it does not.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Open this before writing code.** Pull requests that arrive without a
+        discussion first are usually closed — not because the work is bad, but
+        because the answer to "should this exist" is not in the diff.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What goes wrong for you today
+      description: The situation, not the solution.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What you would like instead
+    validations:
+      required: true

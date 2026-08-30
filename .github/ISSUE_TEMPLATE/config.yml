@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security or a leaked session cookie
+    url: https://github.com/getzenai/whatsmyusage/security/advisories/new
+    about: Never in a public issue. Read SECURITY.md first.
+  - name: Question about how a number is measured
+    url: https://github.com/getzenai/whatsmyusage/tree/main/docs
+    about: The research docs record every endpoint and what it actually returns.
