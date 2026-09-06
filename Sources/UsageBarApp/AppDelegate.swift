@@ -91,7 +91,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastByProvider: [Provider: [UsageOutcome]] = [:]
     /// Last successful voucher read per tracking id. A miss does not clear this;
     /// a successful `.none` does.
-    private var lastResetAvailable: [String: Int] = [:]
+    private var lastReset: [String: ResetRead] = [:]
     private var lastStatusReads: [StatusRead] = []
     private var lastStatusCheckedAt: Date?
 
@@ -139,7 +139,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let store = KeychainStore.load()
             if store.isEmpty {
                 self.lastByProvider = [:]
-                self.lastResetAvailable = [:]
+                self.lastReset = [:]
                 self.statusItem?.update(outcomes: [])
                 self.settings.didRefresh(byProvider: [:])
                 return
@@ -160,10 +160,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let resets = await self.client.fetchResetCredits(using: store)
             if Task.isCancelled { return }
             for (id, read) in resets {
-                if let count = read.count {
-                    self.lastResetAvailable[id] = count
+                if read.count != nil {
+                    self.lastReset[id] = read
                 } else {
-                    self.lastResetAvailable.removeValue(forKey: id)
+                    self.lastReset.removeValue(forKey: id)
                 }
             }
             self.apply(self.lastByProvider)
@@ -181,7 +181,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let prefs = DisplayStore.load()
         statusItem?.pillStyle = prefs.pill
         let shown = prefs.applied(to: raw).map { card in
-            card.withResetAvailable(lastResetAvailable[card.trackingID])
+            card.withReset(lastReset[card.trackingID])
         }
         statusItem?.update(cards: shown, byProvider: byProvider)
         settings.didRefresh(byProvider: byProvider)

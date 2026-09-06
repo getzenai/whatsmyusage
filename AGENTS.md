@@ -29,6 +29,13 @@ Read `README.md` and `docs/` before changing parsers or cookie handling.
   path. A missing field is a miss, not 0 — do not `?? 0`. Show the line only
   when the provider sent a count ≥ 1. Claude has no such endpoint. The extra
   call must not delay the limit refresh.
+- A voucher expiry is read, never derived. ChatGPT dates each `credits[]` entry
+  with `expires_at` and Grok each token with `validity_end`; a voucher the
+  provider did not date is undated, not expiring. Only entries that are still
+  `available` may date the line — a redeemed voucher keeps its old `expires_at`.
+  The count stays the provider's `available_count`; the list only dates it. An
+  expiry already past is dropped from the label rather than shown as overdue:
+  the provider still counts that voucher, and we do not contradict it.
 - The usage log stores every reading, never a state change it decided at write time,
   and never `accountLabel` (org name, plan). The series key is `trackingID + limit.id`,
   which survives a rename. Anything derived — resets, waits, burn rate, achievements —

@@ -60,16 +60,34 @@ public enum LimitScope: String, Sendable, Equatable {
 /// "0 available".
 public enum ResetRead: Equatable, Sendable {
     case none
-    case available(Int)
+    /// The count the provider stated, plus the expiry of every voucher it
+    /// dated, earliest first. The list may be shorter than the count: a
+    /// voucher without an expiry field is undated, never expiring now.
+    case available(Int, expiring: [Date])
+
+    /// A count without any dated voucher. Keeps the older call sites honest —
+    /// no expiry is not the same as an expiry of today.
+    public static func available(_ count: Int) -> ResetRead { .available(count, expiring: []) }
 
     public var count: Int? {
-        if case .available(let n) = self { return n }
+        if case .available(let n, _) = self { return n }
         return nil
     }
 
-    public static func label(for count: Int) -> String? {
+    /// The expiry the user will hit first. Nil when the provider dated nothing.
+    public var firstExpiry: Date? {
+        if case .available(_, let dates) = self { return dates.min() }
+        return nil
+    }
+
+    /// An expiry already in the past is not shown: the provider still counts
+    /// the voucher, and "expires in -2d" would be us contradicting it out loud.
+    public static func label(for count: Int, expiring: Date? = nil, now: Date = Date()) -> String? {
         if count <= 0 { return nil }
-        return count == 1 ? "Reset available" : "\(count) resets available"
+        let head = count == 1 ? "Reset available" : "\(count) resets available"
+        guard let expiring, expiring > now else { return head }
+        let verb = count == 1 ? "expires" : "next expires"
+        return "\(head) · \(verb) \(ResetFormatting.remaining(until: expiring, now: now))"
     }
 }
 

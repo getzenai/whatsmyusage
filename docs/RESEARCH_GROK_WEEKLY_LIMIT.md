@@ -79,6 +79,12 @@ same way for id and end, then shows `availableCount`. `redeemReset` exists on
 the same service — the app must not call it. A missing data frame or a
 non-zero trailer is "no answer", not 0. Display only when the count is ≥ 1.
 
+`validity_end` is also the expiry the app shows. That costs nothing extra: it is
+the field the count already depends on. **Re-measured 2026-09-06 — still an empty
+data frame**, so `10.30` remains unverified against a live token. The expiry is
+displayed only for tokens we counted, so a wrong field number cannot invent a
+date on its own: it would have to first invent the voucher.
+
 Still unused: `GetPrepaidBenefits`, `GrokBuildBilling/ListInvoices`.
 
 ## Method

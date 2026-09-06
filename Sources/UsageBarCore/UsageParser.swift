@@ -94,8 +94,8 @@ public enum UsageParser {
 
     /// ChatGPT `rate-limit-reset-credits`. Nil is a miss. `.none` is
     /// `available_count: 0`.
-    public static func parseChatGPTResetCredits(body: Data) -> ResetRead? {
-        ChatGPTParser.parseResetCredits(body)
+    public static func parseChatGPTResetCredits(body: Data, now: Date = Date()) -> ResetRead? {
+        ChatGPTParser.parseResetCredits(body, now: now)
     }
 
     /// ChatGPT `/api/auth/session` → bearer for `/backend-api/wham/usage`.

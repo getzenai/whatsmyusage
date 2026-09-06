@@ -58,6 +58,8 @@ public struct AccountCard: Equatable, Sendable, Identifiable {
     public let message: String?
     /// Count of unused reset vouchers. Nil means hide the line — never 0.
     public let resetAvailable: Int?
+    /// When the first of those vouchers lapses. Nil when the provider dated none.
+    public let resetExpiry: Date?
 
     public init(
         trackingID: String,
@@ -67,7 +69,8 @@ public struct AccountCard: Equatable, Sendable, Identifiable {
         tone: BarTone,
         utilization: Double?,
         message: String? = nil,
-        resetAvailable: Int? = nil
+        resetAvailable: Int? = nil,
+        resetExpiry: Date? = nil
     ) {
         self.trackingID = trackingID
         self.provider = provider
@@ -77,6 +80,7 @@ public struct AccountCard: Equatable, Sendable, Identifiable {
         self.utilization = utilization
         self.message = message
         self.resetAvailable = resetAvailable.flatMap { $0 >= 1 ? $0 : nil }
+        self.resetExpiry = resetExpiry
     }
 
     public var segment: BarSegment {
@@ -101,11 +105,12 @@ public struct AccountCard: Equatable, Sendable, Identifiable {
             tone: worst.map(BarPresentation.tone(of:)) ?? (message == nil ? .idle : tone),
             utilization: worst?.utilization,
             message: message,
-            resetAvailable: resetAvailable
+            resetAvailable: resetAvailable,
+            resetExpiry: resetExpiry
         )
     }
 
-    public func withResetAvailable(_ count: Int?) -> AccountCard {
+    public func withReset(_ read: ResetRead?) -> AccountCard {
         AccountCard(
             trackingID: trackingID,
             provider: provider,
@@ -114,12 +119,16 @@ public struct AccountCard: Equatable, Sendable, Identifiable {
             tone: tone,
             utilization: utilization,
             message: message,
-            resetAvailable: count
+            resetAvailable: read?.count,
+            resetExpiry: read?.firstExpiry
         )
     }
 
-    public var resetAvailableLabel: String? {
-        resetAvailable.flatMap(ResetRead.label(for:))
+    public var resetAvailableLabel: String? { resetLabel(now: Date()) }
+
+    /// `now` is a parameter so the wording is testable; the view uses the clock.
+    public func resetLabel(now: Date) -> String? {
+        resetAvailable.flatMap { ResetRead.label(for: $0, expiring: resetExpiry, now: now) }
     }
 }
 
@@ -421,7 +430,8 @@ public struct BarPresentation: Equatable, Sendable {
             tone: card.tone,
             utilization: card.utilization,
             message: card.message,
-            resetAvailable: card.resetAvailable
+            resetAvailable: card.resetAvailable,
+            resetExpiry: card.resetExpiry
         )
     }
 
