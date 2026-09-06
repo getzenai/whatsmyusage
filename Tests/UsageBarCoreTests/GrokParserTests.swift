@@ -140,7 +140,7 @@ struct GrokParserTests {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let token = GrokResetWire.token(id: "a", end: 1_800_000_100)
         #expect(UsageParser.parseGrokRemainingResets(body: GrokResetWire.frame(tokens: [token]), now: now)
-            == .available(1))
+            == .available(1, expiring: [Date(timeIntervalSince1970: 1_800_000_100)]))
 
         let message = GrokResetWire.field(10, message: token)
         let failed = GrpcWeb.encode(message: message, trailerStatus: 13)
@@ -160,9 +160,13 @@ struct GrokParserTests {
             body: GrokResetWire.frame(tokens: [other, past, future]),
             now: now
         )
-        #expect(forward == .available(2))
-        #expect(backward == .available(2))
-        #expect(ResetRead.label(for: 2) == "2 resets available")
+        // Both orders end at the same pair, earliest first — the label speaks
+        // about the token that lapses next, not the one listed first.
+        let ends = [Date(timeIntervalSince1970: 1_800_000_100), Date(timeIntervalSince1970: 1_800_000_200)]
+        #expect(forward == .available(2, expiring: ends))
+        #expect(backward == .available(2, expiring: ends))
+        #expect(ResetRead.label(for: 2, expiring: forward?.firstExpiry, now: now)
+            == "2 resets available · next expires in 1m")
     }
 
     @Test func remainingResetsSkipsEmptyIdAndMissingEnd() {
@@ -177,8 +181,9 @@ struct GrokParserTests {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let body = GrokResetWire.frame(tokens: [GrokResetWire.token(id: "a", end: 1_800_000_100)])
         let read = UsageParser.parseGrokRemainingResets(body: body, now: now)
-        #expect(read == .available(1))
-        #expect(ResetRead.label(for: 1) == "Reset available")
+        #expect(read == .available(1, expiring: [Date(timeIntervalSince1970: 1_800_000_100)]))
+        #expect(ResetRead.label(for: 1, expiring: read?.firstExpiry, now: now)
+            == "Reset available · expires in 1m")
     }
 
     @Test func omittedPercentOnWeeklyPeriodIsZero() throws {

@@ -78,17 +78,19 @@ enum GrokParser {
               let root = Proto.decode(message)
         else { return nil }
 
-        var count = 0
+        // `validity_end` is both the reason a token counts and the date the user
+        // wants to see — the same field, kept instead of thrown away.
+        var expiring: [Date] = []
         for token in Proto.messages(root, 10) {
             guard let id = Proto.string(token, 10), !id.isEmpty else { continue }
             if let start = timestamp(token, 20), start > now { continue }
             guard let end = timestamp(token, 30), end > now else { continue }
-            count += 1
+            expiring.append(end)
         }
         // `ResetRead.none`, spelled out: a bare `.none` in a `ResetRead?` context
         // resolves to `Optional.none` — nil — and nil means "we did not read this",
         // which keeps the stale count on screen. Zero vouchers is a reading.
-        return count >= 1 ? .available(count) : ResetRead.none
+        return expiring.isEmpty ? ResetRead.none : .available(expiring.count, expiring: expiring.sorted())
     }
 
     private static func timestamp(_ fields: [Proto.Field], _ number: UInt64) -> Date? {

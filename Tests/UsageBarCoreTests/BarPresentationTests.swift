@@ -355,8 +355,8 @@ struct BarPresentationTests {
         #expect(locked.resetAvailable == nil)
         #expect(locked.resetAvailableLabel == nil)
 
-        let one = locked.withResetAvailable(1)
-        let two = locked.withResetAvailable(2)
+        let one = locked.withReset(.available(1))
+        let two = locked.withReset(.available(2))
         #expect(one.resetAvailableLabel == "Reset available")
         #expect(two.resetAvailableLabel == "2 resets available")
         #expect(one.displaying(limits: one.limits).resetAvailableLabel == "Reset available")

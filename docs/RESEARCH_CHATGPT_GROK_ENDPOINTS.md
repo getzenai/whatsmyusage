@@ -65,9 +65,31 @@ Supplementary endpoints, not needed for v1:
 
 | Endpoint | Content |
 |---|---|
-| `GET /backend-api/wham/rate-limit-reset-credits` | Reset vouchers. Measured 2026-08-16: `{ "available_count": 0, "credits": [], "immediate_reset_purchase_eligible": false, "total_earned_count": 0 }`. Same Bearer as `/wham/usage`. Missing `available_count` is a miss, not 0. `immediate_reset_purchase_eligible` is a store flag — do not redeem, do not offer to buy. |
+| `GET /backend-api/wham/rate-limit-reset-credits` | Reset vouchers. Measured 2026-08-16: `{ "available_count": 0, "credits": [], "immediate_reset_purchase_eligible": false, "total_earned_count": 0 }`. Same Bearer as `/wham/usage`. Missing `available_count` is a miss, not 0. `immediate_reset_purchase_eligible` is a store flag — do not redeem, do not offer to buy. **`credits[]` non-empty for the first time 2026-09-06**, see below. |
 | `GET /backend-api/accounts/{accountId}/remaining_balance` | balance as a string (`"0"`) |
 | `GET /backend-api/pageConfigs/usage_limits` | only controls what the web UI displays |
+
+### `credits[]` — the vouchers themselves, measured 2026-09-06
+
+The list was empty in August, so its shape was unknown. One entry, values replaced:
+
+```json
+{ "id": "RateLimitResetCredit_…", "status": "available", "title": "Full reset",
+  "description": "Thanks for using Codex! You've been granted one free rate limit reset.",
+  "reset_type": "codex_rate_limits", "is_supported_by_plan": true,
+  "granted_at": "2026-08-22T00:25:41.334314Z", "expires_at": "2026-09-21T00:25:41.334314Z",
+  "redeem_started_at": null, "redeemed_at": null,
+  "profile_image_url": "…", "profile_user_id": "…" }
+```
+
+- **`expires_at` is ISO 8601 with six fractional digits** — the same shape Claude sends, so
+  `DateParsing.iso8601` reads it. Observed 30 days after `granted_at` on all three vouchers,
+  but that is an observation about a grant, not a rule the API states. Read the field.
+- **`available_count` stays the count.** It matched the number of entries with
+  `status: "available"` (3 of 3). The list is what dates them, nothing more.
+- **`status` is the reason not to date a voucher from every entry.** A redeemed one keeps its
+  `expires_at`; taking it would warn about a deadline that belongs to a voucher that is gone.
+- `history_enabled: false` came with it — the account was not sent past vouchers at all.
 
 ## Grok
 

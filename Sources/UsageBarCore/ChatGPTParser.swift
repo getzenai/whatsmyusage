@@ -49,7 +49,7 @@ enum ChatGPTParser {
 
     /// `/backend-api/wham/rate-limit-reset-credits`. Nil when the key is
     /// absent or not a number — that is a miss, not zero. `0` is `.none`.
-    static func parseResetCredits(_ body: Data) -> ResetRead? {
+    static func parseResetCredits(_ body: Data, now: Date = Date()) -> ResetRead? {
         guard let obj = try? JSONSerialization.jsonObject(with: body),
               let root = obj as? [String: Any],
               root.keys.contains("available_count"),
@@ -59,7 +59,29 @@ enum ChatGPTParser {
         // `ResetRead.none`, spelled out: a bare `.none` in a `ResetRead?` context
         // resolves to `Optional.none` — nil — and nil means "we did not read this",
         // which keeps the stale count on screen. Zero vouchers is a reading.
-        return count >= 1 ? .available(count) : ResetRead.none
+        return count >= 1 ? .available(count, expiring: expiries(root["credits"], now: now)) : ResetRead.none
+    }
+
+    /// `credits[]`, first seen non-empty 2026-09-06: one object per voucher with
+    /// `expires_at` and `granted_at` (ISO 8601, six fractional digits) and a
+    /// `status`. `available_count` stays the count — this only dates it.
+    ///
+    /// A voucher that is no longer `available` has been used or has lapsed; its
+    /// expiry is history and must not become the one we warn about. An entry
+    /// without a readable `expires_at` is undated, not expiring — skip it rather
+    /// than invent a date.
+    ///
+    /// A date already past is dropped too, the same way Grok's parser drops a
+    /// lapsed `validity_end`. Otherwise one stale entry would win `min()` and
+    /// hide the deadline the user can still act on.
+    private static func expiries(_ value: Any?, now: Date) -> [Date] {
+        guard let entries = JSONValue.array(value) else { return [] }
+        return entries.compactMap { entry -> Date? in
+            guard let object = JSONValue.object(entry) else { return nil }
+            if let status = JSONValue.string(object["status"]), status != "available" { return nil }
+            guard let expiry = DateParsing.iso8601(object["expires_at"]), expiry > now else { return nil }
+            return expiry
+        }.sorted()
     }
 
     /// `allowed` is the honest field. Missing `allowed` stays unknown — `limit_reached`
