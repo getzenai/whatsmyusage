@@ -1,0 +1,36 @@
+name: Bug report
+description: A number is wrong, or the app does not do what it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Replace anything that identifies your account with a placeholder:
+        cookie, org UUID, e-mail address, real usage numbers. See SECURITY.md.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: At the bottom of the app's window, e.g. 0.10.0 · a1b2c3d.
+    validations:
+      required: true
+  - type: dropdown
+    id: provider
+    attributes:
+      label: Provider
+      options: [Claude, ChatGPT, Grok, more than one]
+    validations:
+      required: true
+  - type: textarea
+    id: shown
+    attributes:
+      label: What the app shows, and what the provider's page shows
+      description: Both numbers, and where you read the second one.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to get there
+    validations:
+      required: true

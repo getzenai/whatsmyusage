@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/getzenai/whatsmyusage/security/advisories/new
+    about: Private advisory instead of a public issue. See SECURITY.md.
+  - name: Question about how a number is measured
+    url: https://github.com/getzenai/whatsmyusage/tree/main/docs
+    about: The research docs record every endpoint and what it actually returns.
