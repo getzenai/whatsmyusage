@@ -1,5 +1,5 @@
-name: A number is wrong
-description: The bar shows something the provider's own page does not.
+name: Bug report
+description: A number is wrong, or the app does not do what it should.
 labels: [bug]
 body:
   - type: markdown
