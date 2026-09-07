@@ -68,8 +68,10 @@ Developer ID certificate, not separately.
 
 ## How a release reaches the feed
 
-`.github/workflows/release.yml` does all of it, in this order, and each step
-exists because the one before it is not enough:
+`.github/workflows/release.yml` does all of it. It is started by hand — Actions
+→ Release → Run workflow, or `gh workflow run release.yml` — so a merge never
+ships on its own and a batch of merged PRs becomes one version. The steps, in
+this order, and each one exists because the one before it is not enough:
 
 1. Build on a macOS runner and sign with the Developer ID, hardened runtime and
    a real timestamp — Sparkle's helpers (`Autoupdate`, `Updater.app`, the two
