@@ -23,10 +23,14 @@ fix(parsers): read a missing count as a miss
 feat(log)!: rekey the series          # breaking
 ```
 
-`docs`, `chore`, `ci`, `test`, `build` and `refactor` release nothing. A version
-bump is a promise about behaviour.
+Only `feat`, `fix`, `perf` and `revert` release a version; every other type
+releases nothing. A version bump is a promise about behaviour.
 
-There is no test CI, so run the checks yourself on the exact commit you submit:
+CI runs on every pull request: the whole test suite, a warning-free release
+build, the app bundle and the disk image. It does not release anything — a
+release is started by hand (Actions → Release → Run workflow).
+
+Run the same checks locally before you push, on the exact commit you submit:
 
 ```sh
 swift test                                    # the whole suite, never a filter

@@ -11,7 +11,7 @@ body:
     id: version
     attributes:
       label: Version
-      description: The version in the menu, e.g. v1.4.0.
+      description: At the bottom of the app's window, e.g. 0.10.0 · a1b2c3d.
     validations:
       required: true
   - type: dropdown

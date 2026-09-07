@@ -17,7 +17,13 @@ session.
 
 ## What this app can reach
 
-The app talks to three provider APIs with a cookie you pasted yourself, keeps
-that cookie in the macOS Keychain, and writes readings to a local SQLite file.
-It sends nothing anywhere else, and it never calls a purchase or redemption
-path. The `whatsmyusage` CLI has no network and no Keychain access at all.
+The app reads three provider APIs with a cookie you pasted yourself, keeps that
+cookie in the macOS Keychain, and writes readings to a local SQLite file. Each
+cookie only ever goes to the provider it came from, and no reading leaves your
+machine.
+
+Besides those three it fetches two kinds of public page, both without a cookie:
+the status pages of Anthropic, OpenAI, xAI and GitHub, and the update feed at
+whatsmyusage.com. It calls no purchase or redemption path anywhere. The
+`whatsmyusage` CLI reads the local log and nothing else: no network, no
+Keychain.
