@@ -92,6 +92,12 @@ public enum UsageParser {
         GrokParser.parseRemainingResets(body, now: now)
     }
 
+    /// Claude `usage?cedar_ember=1`. Nil is a miss. `.none` is a plan with no
+    /// grants left.
+    public static func parseClaudeResetGrants(body: Data, now: Date = Date()) -> ResetRead? {
+        ClaudeParser.parseResetGrants(body, now: now)
+    }
+
     /// ChatGPT `rate-limit-reset-credits`. Nil is a miss. `.none` is
     /// `available_count: 0`.
     public static func parseChatGPTResetCredits(body: Data, now: Date = Date()) -> ResetRead? {
