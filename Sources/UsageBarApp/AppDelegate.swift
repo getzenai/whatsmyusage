@@ -157,7 +157,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
             // Vouchers after the numbers. A slow or failing extra call must
             // not hold the limits — they are already on screen.
-            let resets = await self.client.fetchResetCredits(using: store)
+            let resets = await self.client.fetchResetCredits(
+                using: store,
+                claudeOrgIDs: result.claudeOrgIDsByAccountID
+            )
             if Task.isCancelled { return }
             for (id, read) in resets {
                 if read.count != nil {

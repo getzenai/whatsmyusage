@@ -43,9 +43,23 @@ struct UsageClient {
 
     /// Second pass, after the numbers are on screen. Missing or failed reads
     /// are omitted from the map so the last good value can stay.
-    func fetchResetCredits(using store: CredentialStore) async -> [String: ResetRead] {
+    ///
+    /// Claude vouchers are per organization, keyed like its card
+    /// (`claude:<org>`). `claudeOrgIDs` is the trackable set the limit refresh
+    /// just read — the stored set may still be the one from before this run.
+    func fetchResetCredits(
+        using store: CredentialStore,
+        claudeOrgIDs: [String: Set<String>]
+    ) async -> [String: ResetRead] {
         await withTaskGroup(of: (String, ResetRead?).self) { group in
             for account in store.accounts {
+                if let claude = account.claude {
+                    for org in claudeOrgIDs[account.id] ?? [] {
+                        group.addTask {
+                            ("claude:\(org)", await self.fetchClaudeResets(claude, orgID: org))
+                        }
+                    }
+                }
                 if let gpt = account.chatGPT {
                     group.addTask {
                         ("chatgpt:\(account.id)", await self.fetchChatGPTResets(gpt))
@@ -273,6 +287,18 @@ struct UsageClient {
         )
         guard response.status == 200 else { return nil }
         return UsageParser.parseChatGPTResetCredits(body: response.body)
+    }
+
+    /// The vouchers ride on the usage call with `cedar_ember=1`, the way
+    /// claude.ai's own settings page asks for them. A separate request so the
+    /// logged limit reading stays the plain `/usage` it always was.
+    private func fetchClaudeResets(_ creds: ClaudeCredentials, orgID: String) async -> ResetRead? {
+        let encoded = orgID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? orgID
+        guard let url = URL(string: "https://claude.ai/api/organizations/\(encoded)/usage?cedar_ember=1&skip_spend=1")
+        else { return nil }
+        let response = await get(url: url, cookie: creds.cookieHeader, timeout: Self.resetTimeout)
+        guard response.status == 200 else { return nil }
+        return UsageParser.parseClaudeResetGrants(body: response.body)
     }
 
     private func fetchGrokResets(_ creds: GrokCredentials) async -> ResetRead? {

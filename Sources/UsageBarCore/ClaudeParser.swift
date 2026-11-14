@@ -62,6 +62,33 @@ enum ClaudeParser {
         return .snapshot(UsageSnapshot(provider: .claude, accountLabel: accountLabel, limits: fallback))
     }
 
+    /// `/api/organizations/{id}/usage?cedar_ember=1`. The vouchers sit under
+    /// `cedar_ember`, which the plain `/usage` call sends as `null`. Nil when
+    /// that key is not an object or `grants` is not a list — a miss, not zero.
+    /// An ineligible plan sends `grants: []`, which is `.none`.
+    ///
+    /// The count is `resets_left` summed over the grants, the same total
+    /// claude.ai shows as "N available". Each grant is dated by its `ends_at`,
+    /// once per reset left in it. A grant without a readable `ends_at` or one
+    /// already past is skipped, as claude.ai's own parser does.
+    static func parseResetGrants(_ body: Data, now: Date = Date()) -> ResetRead? {
+        guard let obj = try? JSONSerialization.jsonObject(with: body),
+              let root = obj as? [String: Any],
+              let ember = JSONValue.object(root["cedar_ember"]),
+              let grants = JSONValue.array(ember["grants"])
+        else { return nil }
+        var expiring: [Date] = []
+        for grant in grants {
+            guard let total = JSONValue.int(grant["resets_total"]), total >= 1,
+                  let left = JSONValue.int(grant["resets_left"]), left >= 1,
+                  let end = DateParsing.iso8601(grant["ends_at"]), end > now
+            else { continue }
+            expiring.append(contentsOf: Array(repeating: end, count: min(left, total)))
+        }
+        // `ResetRead.none`, spelled out: a bare `.none` here is `Optional.none`.
+        return expiring.isEmpty ? ResetRead.none : .available(expiring.count, expiring: expiring.sorted())
+    }
+
     static func parseBootstrap(_ root: [String: Any]) -> UsageOutcome {
         let orgs = organizations(in: root)
         if orgs.isEmpty { return .empty }
