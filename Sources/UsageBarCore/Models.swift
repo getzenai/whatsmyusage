@@ -63,21 +63,29 @@ public enum ResetRead: Equatable, Sendable {
     /// The count the provider stated, plus the expiry of every voucher it
     /// dated, earliest first. The list may be shorter than the count: a
     /// voucher without an expiry field is undated, never expiring now.
-    case available(Int, expiring: [Date])
+    /// `groups` splits the count by what a voucher resets, when the provider
+    /// says so (Claude: Fable resets next to the weekly or full one). Empty
+    /// when every voucher does the same thing.
+    case available(Int, expiring: [Date], groups: [ResetGroup] = [])
 
     /// A count without any dated voucher. Keeps the older call sites honest —
     /// no expiry is not the same as an expiry of today.
     public static func available(_ count: Int) -> ResetRead { .available(count, expiring: []) }
 
     public var count: Int? {
-        if case .available(let n, _) = self { return n }
+        if case .available(let n, _, _) = self { return n }
         return nil
     }
 
     /// The expiry the user will hit first. Nil when the provider dated nothing.
     public var firstExpiry: Date? {
-        if case .available(_, let dates) = self { return dates.min() }
+        if case .available(_, let dates, _) = self { return dates.min() }
         return nil
+    }
+
+    public var groups: [ResetGroup] {
+        if case .available(_, _, let groups) = self { return groups }
+        return []
     }
 
     /// An expiry already in the past is not shown: the provider still counts
@@ -88,6 +96,31 @@ public enum ResetRead: Equatable, Sendable {
         guard let expiring, expiring > now else { return head }
         let verb = count == 1 ? "expires" : "next expires"
         return "\(head) · \(verb) \(ResetFormatting.remaining(until: expiring, now: now))"
+    }
+}
+
+/// Vouchers that reset the same thing. `name` is what they reset, in the
+/// words claude.ai uses, lower-case for the plan resets ("weekly", "full")
+/// and the model name for model resets ("Fable").
+public struct ResetGroup: Equatable, Sendable {
+    public let name: String
+    public let count: Int
+    /// Soonest expiry in the group. Nil when the provider dated none.
+    public let firstExpiry: Date?
+
+    public init(name: String, count: Int, firstExpiry: Date?) {
+        self.name = name
+        self.count = count
+        self.firstExpiry = firstExpiry
+    }
+
+    /// "3 Fable resets · expire in 111d". Same past-expiry rule as the total.
+    public func label(now: Date = Date()) -> String? {
+        if count <= 0 { return nil }
+        let head = count == 1 ? "1 \(name) reset" : "\(count) \(name) resets"
+        guard let firstExpiry, firstExpiry > now else { return head }
+        let verb = count == 1 ? "expires" : "next expires"
+        return "\(head) · \(verb) \(ResetFormatting.remaining(until: firstExpiry, now: now))"
     }
 }
 
@@ -110,6 +143,11 @@ public struct Limit: Equatable, Sendable, Identifiable {
     public let locked: LockState
     public let scope: LimitScope
     public let severity: LimitSeverity
+    /// How much of the weekly limit this model limit may use, 0…1. Claude caps
+    /// Fable at a share of the week ("up to 50 % of your weekly limit"), so a
+    /// full Fable bar means that share is spent, not the whole week. Nil when
+    /// the provider sent none.
+    public let shareOfWeek: Double?
 
     public init(
         id: String,
@@ -118,7 +156,8 @@ public struct Limit: Equatable, Sendable, Identifiable {
         resetsAt: Date?,
         locked: LockState,
         scope: LimitScope,
-        severity: LimitSeverity = .unknown
+        severity: LimitSeverity = .unknown,
+        shareOfWeek: Double? = nil
     ) {
         self.id = id
         self.label = label
@@ -127,6 +166,7 @@ public struct Limit: Equatable, Sendable, Identifiable {
         self.locked = locked
         self.scope = scope
         self.severity = severity
+        self.shareOfWeek = shareOfWeek.flatMap { $0 > 0 && $0 <= 1 ? $0 : nil }
     }
 
     /// Keep the human label. The org name belongs on the card header, not on every row.
@@ -138,7 +178,8 @@ public struct Limit: Equatable, Sendable, Identifiable {
             resetsAt: resetsAt,
             locked: locked,
             scope: scope,
-            severity: severity
+            severity: severity,
+            shareOfWeek: shareOfWeek
         )
     }
 
@@ -150,7 +191,8 @@ public struct Limit: Equatable, Sendable, Identifiable {
             resetsAt: resetsAt,
             locked: locked,
             scope: scope,
-            severity: severity
+            severity: severity,
+            shareOfWeek: shareOfWeek
         )
     }
 }
