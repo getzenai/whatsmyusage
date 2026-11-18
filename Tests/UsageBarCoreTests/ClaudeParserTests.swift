@@ -51,6 +51,24 @@ struct ClaudeParserTests {
         #expect(snap.worstAccountLimit?.utilization == 0.20)
     }
 
+    /// claude.ai: "Fable — Up to 50% of your weekly limit". `limit_index`
+    /// points into `limits[]`; it was 1 on Max and 2 on Team (2026-11-18).
+    @Test func weeklyShareLandsOnTheModelLimitItPointsAt() throws {
+        let snap = try snapshot(#"""
+        {"limits": [
+          {"kind": "session", "percent": 0, "scope": null},
+          {"kind": "weekly_all", "percent": 10, "scope": null},
+          {"kind": "weekly_scoped", "percent": 4, "scope": {"model": {"id": null, "display_name": "Fable"}}}],
+         "weekly_scoped_shares": [{"limit_index": 2, "used_percent_of_weekly": 2, "allowance_percent_of_weekly": 50}]}
+        """#)
+        #expect(snap.limits.map(\.shareOfWeek) == [nil, nil, 0.5])
+    }
+
+    @Test func noSharesMeansNoShare() throws {
+        let snap = try snapshot(Fixtures.claudeModelHigher)
+        #expect(snap.limits.allSatisfy { $0.shareOfWeek == nil })
+    }
+
     @Test func limitsArrayIsTheSource() throws {
         let snap = try snapshot(Fixtures.claudeBlocked)
         #expect(snap.limits.map(\.id) == ["session", "weekly_all", "weekly_scoped:ExampleModel"])

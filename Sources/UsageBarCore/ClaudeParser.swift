@@ -36,7 +36,10 @@ enum ClaudeParser {
 
     static func parseUsage(_ root: [String: Any], accountLabel: String?) -> UsageOutcome {
         if let limits = JSONValue.array(root["limits"]), !limits.isEmpty {
-            let parsed = limits.compactMap(limit(fromEntry:))
+            let shares = weeklyShares(root["weekly_scoped_shares"])
+            let parsed = limits.enumerated().compactMap { index, entry in
+                limit(fromEntry: entry, shareOfWeek: shares[index])
+            }
             if !parsed.isEmpty {
                 return .snapshot(UsageSnapshot(provider: .claude, accountLabel: accountLabel, limits: parsed))
             }
@@ -71,22 +74,58 @@ enum ClaudeParser {
     /// claude.ai shows as "N available". Each grant is dated by its `ends_at`,
     /// once per reset left in it. A grant without a readable `ends_at` or one
     /// already past is skipped, as claude.ai's own parser does.
+    ///
+    /// claude.ai lists the vouchers by what they reset, and so do we: a grant
+    /// whose `clears` holds `seven_day` resets the week ("Weekly" when its
+    /// `type` is `weekly`, "Full" when it also clears the 5-hour window, as on
+    /// Team). One that leaves the week alone is a model reset, named after the
+    /// model-scoped limit in the same response ("Fable"). Measured 2026-11-18
+    /// on a Max and a Team org.
     static func parseResetGrants(_ body: Data, now: Date = Date()) -> ResetRead? {
         guard let obj = try? JSONSerialization.jsonObject(with: body),
               let root = obj as? [String: Any],
               let ember = JSONValue.object(root["cedar_ember"]),
               let grants = JSONValue.array(ember["grants"])
         else { return nil }
+        let model = scopedModelName(root["limits"])
         var expiring: [Date] = []
+        var byName: [(name: String, dates: [Date])] = []
         for grant in grants {
             guard let total = JSONValue.int(grant["resets_total"]), total >= 1,
                   let left = JSONValue.int(grant["resets_left"]), left >= 1,
                   let end = DateParsing.iso8601(grant["ends_at"]), end > now
             else { continue }
-            expiring.append(contentsOf: Array(repeating: end, count: min(left, total)))
+            let dates = Array(repeating: end, count: min(left, total))
+            expiring.append(contentsOf: dates)
+            let name = resetName(grant, model: model)
+            if let i = byName.firstIndex(where: { $0.name == name }) {
+                byName[i].dates.append(contentsOf: dates)
+            } else {
+                byName.append((name, dates))
+            }
         }
         // `ResetRead.none`, spelled out: a bare `.none` here is `Optional.none`.
-        return expiring.isEmpty ? ResetRead.none : .available(expiring.count, expiring: expiring.sorted())
+        if expiring.isEmpty { return ResetRead.none }
+        // One kind of voucher needs no breakdown: the total says it all.
+        let groups = byName.count < 2 ? [] : byName
+            .map { ResetGroup(name: $0.name, count: $0.dates.count, firstExpiry: $0.dates.min()) }
+            .sorted { ($0.firstExpiry ?? .distantFuture) < ($1.firstExpiry ?? .distantFuture) }
+        return .available(expiring.count, expiring: expiring.sorted(), groups: groups)
+    }
+
+    private static func resetName(_ grant: [String: Any], model: String?) -> String {
+        let clears = Set(stringArray(grant["clears"]) ?? [])
+        if clears.contains("seven_day") {
+            if JSONValue.string(grant["type"]) == "weekly" { return "weekly" }
+            return "full"
+        }
+        return model ?? "model"
+    }
+
+    /// The model of the one model-scoped limit, if there is exactly one.
+    private static func scopedModelName(_ limits: Any?) -> String? {
+        let names = Set((JSONValue.array(limits) ?? []).compactMap { modelName($0["scope"]) })
+        return names.count == 1 ? names.first : nil
     }
 
     static func parseBootstrap(_ root: [String: Any]) -> UsageOutcome {
@@ -137,7 +176,21 @@ enum ClaudeParser {
         return organizations(in: root)
     }
 
-    private static func limit(fromEntry entry: [String: Any]) -> Limit? {
+    /// `weekly_scoped_shares[]`: `limit_index` points into `limits[]`,
+    /// `allowance_percent_of_weekly` is the share of the week that model may
+    /// use. claude.ai prints it as "Up to 50% of your weekly limit".
+    private static func weeklyShares(_ value: Any?) -> [Int: Double] {
+        var shares: [Int: Double] = [:]
+        for entry in JSONValue.array(value) ?? [] {
+            guard let index = JSONValue.int(entry["limit_index"]),
+                  let percent = JSONValue.number(entry["allowance_percent_of_weekly"])
+            else { continue }
+            shares[index] = percent / 100
+        }
+        return shares
+    }
+
+    private static func limit(fromEntry entry: [String: Any], shareOfWeek: Double? = nil) -> Limit? {
         guard let percent = JSONValue.number(entry["percent"]) else { return nil }
         // Unknown `kind` values pass through. New limits must show up without a release.
         let kindKey = JSONValue.string(entry["kind"])
@@ -152,7 +205,8 @@ enum ClaudeParser {
             // Claude sends percentages only. `is_active` is not a lock.
             locked: .unknown,
             scope: model == nil ? .account : .model,
-            severity: severity(entry["severity"])
+            severity: severity(entry["severity"]),
+            shareOfWeek: model == nil ? nil : shareOfWeek
         )
     }
 

@@ -295,7 +295,7 @@ private struct AccountCardView: View {
                 LimitRow(limit: limit, wait: wait(for: limit))
             }
 
-            if let reset = card.resetAvailableLabel {
+            ForEach(card.resetLines, id: \.self) { reset in
                 Text(reset)
                     .font(.system(size: 12))
                     .foregroundStyle(card.tone == .blocked ? Color.primary : Color.secondary)
@@ -366,9 +366,10 @@ private struct LimitRow: View {
     /// Reset time and, when this limit is the one holding you up, how long it has.
     /// The measured wait, not now − since: the last reading is the last thing we know.
     private var footnote: String? {
+        let share = limit.shareOfWeek.map { "up to \(BarPresentation.percentString($0)) of the week" }
         let reset = limit.resetsAt.map { "resets \(ResetFormatting.remaining(until: $0))" }
         let waiting = wait.map { "full for \($0.duration.hoursAndMinutes)" }
-        return [reset, waiting].compactMap { $0 }.joined(separator: " · ").nilIfEmpty
+        return [share, reset, waiting].compactMap { $0 }.joined(separator: " · ").nilIfEmpty
     }
 
     private var barColor: Color {
